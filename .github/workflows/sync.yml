@@ -1,0 +1,53 @@
+name: Sync
+
+on:
+    schedule:
+        - cron: "0 1 * * *"
+
+env:
+    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+jobs:
+    sync:
+        runs-on: ubuntu-latest
+
+        steps:
+            - uses: actions/checkout@v3
+
+            - name: Configure CI Git User
+              run: git config --global user.name '@ftrprf' && git config --global user.email 'developer@ftrprf.be' && git config pull.rebase false
+
+            - name: Install hub
+              shell: bash
+              run: curl -fsSL https://github.com/github/hub/raw/master/script/get | bash -s 2.14.1
+
+            - name: Add upstream
+              run: git remote add upstream https://github.com/scratchfoundation/scratch-editor.git
+
+            - name: Fetch upstream
+              run: git fetch upstream develop
+
+            - name: Checkout develop
+              run: git checkout develop
+
+              # We don't add anything to the develop branch, so merging will always succeed.
+            - name: Merge upstream
+              run: git merge upstream/develop
+
+            - name: Push new commits from upstream to develop branch
+              run: git push origin develop
+
+            - name: Remove upstream
+              run: git remote remove upstream
+
+            - name: Close PR and delete sync branch
+              run: gh pr close sync -d &>/dev/null || true
+
+            - name: Create new sync branch from develop
+              run: git checkout develop && git checkout -b sync
+
+            - name: Push sync branch
+              run: git push --set-upstream origin sync
+
+            - name: Create PR
+              run: gh pr create --base FTRPRF --head sync --title "Sync" --body "Sync"
