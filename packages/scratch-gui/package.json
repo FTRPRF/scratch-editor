@@ -1,6 +1,6 @@
 {
   "name": "@ftrprf/scratch-gui-react18",
-  "version": "12.7.0",
+  "version": "12.7.0.1",
   "description": "Graphical User Interface for creating and running Scratch 3.0 projects",
   "keywords": [],
   "homepage": "https://github.com/scratchfoundation/scratch-gui#readme",
