@@ -36,6 +36,6 @@ jobs:
         run: npm run build:dist --workspace=@ftrprf/scratch-gui-react18
 
       - name: Publish to GitHub Packages
-        run: npm publish --workspace=@ftrprf/scratch-gui-react18
+        run: npm publish --workspace=@ftrprf/scratch-gui-react18 --tag fork
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
