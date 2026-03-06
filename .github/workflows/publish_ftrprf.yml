@@ -23,6 +23,15 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Build scratch-svg-renderer
+        run: npm run build --workspace @scratch/scratch-svg-renderer
+
+      - name: Build scratch-render
+        run: npm run build --workspace @scratch/scratch-render
+
+      - name: Build scratch-vm
+        run: npm run build --workspace @scratch/scratch-vm
+
       - name: Build
         run: npm run build:dist --workspace=@ftrprf/scratch-gui-react18
 
