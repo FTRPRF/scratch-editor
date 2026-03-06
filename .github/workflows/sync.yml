@@ -12,7 +12,7 @@ jobs:
         runs-on: ubuntu-latest
 
         steps:
-            - uses: actions/checkout@v3
+            - uses: actions/checkout@v2
 
             - name: Configure CI Git User
               run: git config --global user.name '@ftrprf' && git config --global user.email 'developer@ftrprf.be' && git config pull.rebase false

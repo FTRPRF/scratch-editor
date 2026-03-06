@@ -27,7 +27,7 @@ const mapDynamicAsset = item => {
  * do not override them.
  * @param {Array} staticAssets the static assets bundled with the editor
  * @param {Array} dynamicAssets an array of dynamic assets loaded at runtime
- * @returns {Object} an object containing `source` and `data` properties, where:
+ * @returns {object} an object containing `source` and `data` properties, where:
  *  - `source` - the original dynamicAssets array (or null/undefined)
  *  - `data` - the merged array of assets
  */
