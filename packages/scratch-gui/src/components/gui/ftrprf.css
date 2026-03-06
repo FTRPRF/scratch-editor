@@ -1,0 +1,11 @@
+.tabContentWrapper {
+    width: 100% !important;
+    background: white;
+    stroke-width: 1;
+    border-top-left-radius: 0.5rem;
+    border-top-right-radius: 0.5rem;
+    border-color: hsla(0, 0%, 0%, 0.15);
+    border-width: 1px;
+    border-style: solid;
+    height: 99.9%;
+}

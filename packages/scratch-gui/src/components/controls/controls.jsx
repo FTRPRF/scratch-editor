@@ -29,6 +29,7 @@ const Controls = function (props) {
         onGreenFlagClick,
         onStopAllClick,
         turbo,
+        FTRPRFControls,
         ...componentProps
     } = props;
     const intl = useIntl();
@@ -47,6 +48,7 @@ const Controls = function (props) {
                 title={intl.formatMessage(messages.stopTitle)}
                 onClick={onStopAllClick}
             />
+            <FTRPRFControls />
             {turbo ? (
                 <TurboMode />
             ) : null}
@@ -59,7 +61,8 @@ Controls.propTypes = {
     className: PropTypes.string,
     onGreenFlagClick: PropTypes.func.isRequired,
     onStopAllClick: PropTypes.func.isRequired,
-    turbo: PropTypes.bool
+    turbo: PropTypes.bool,
+    FTRPRFControls: PropTypes.element
 };
 
 Controls.defaultProps = {

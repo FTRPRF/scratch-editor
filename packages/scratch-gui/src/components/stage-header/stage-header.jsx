@@ -57,6 +57,7 @@ const messages = defineMessages({
 
 const StageHeaderComponent = function (props) {
     const {
+        FTRPRFControls,
         isFullScreen,
         isPlayerOnly,
         manuallySaveThumbnails,
@@ -129,7 +130,10 @@ const StageHeaderComponent = function (props) {
                     className={styles.stageMenuWrapper}
                     style={{width: stageDimensions.width}}
                 >
-                    <Controls vm={vm} />
+                    <Controls
+                        FTRPRFControls={FTRPRFControls}
+                        vm={vm}
+                    />
                     {stageButton}
                 </Box>
             </Box>

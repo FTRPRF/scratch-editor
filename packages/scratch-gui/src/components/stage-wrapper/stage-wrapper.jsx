@@ -15,6 +15,7 @@ const StageWrapperComponent = function (props) {
     const {
         ariaLabel,
         ariaRole,
+        FTRPRFControls,
         isFullScreen,
         isRtl,
         isRendererSupported,
@@ -38,6 +39,7 @@ const StageWrapperComponent = function (props) {
         >
             <Box className={styles.stageMenuWrapper}>
                 <StageHeader
+                    FTRPRFControls={FTRPRFControls}
                     manuallySaveThumbnails={manuallySaveThumbnails}
                     onUpdateProjectThumbnail={onUpdateProjectThumbnail}
                     stageSize={stageSize}
@@ -64,6 +66,7 @@ const StageWrapperComponent = function (props) {
 StageWrapperComponent.propTypes = {
     ariaLabel: PropTypes.string,
     ariaRole: PropTypes.string,
+    FTRPRFControls: PropTypes.element,
     isFullScreen: PropTypes.bool,
     isRendererSupported: PropTypes.bool.isRequired,
     isRtl: PropTypes.bool.isRequired,

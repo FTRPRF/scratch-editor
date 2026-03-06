@@ -39,6 +39,7 @@ import {DEFAULT_THEME, themeMap} from '../../lib/settings/theme/index.js';
 import {AccountMenuOptionsPropTypes} from '../../lib/account-menu-options';
 
 import styles from './gui.css';
+import ftrprfStyles from './ftrprf.css';
 import codeIcon from './icon--code.svg';
 import costumesIcon from './icon--costumes.svg';
 import soundsIcon from './icon--sounds.svg';
@@ -201,6 +202,8 @@ const GUIComponent = props => {
         userOwnsProject,
         hideTutorialProjects,
         vm,
+        tabs,
+        FTRPRFControls,
         ...componentProps
     } = omit(props, 'dispatch', 'setPlatform');
     if (children) {
@@ -461,6 +464,21 @@ const GUIComponent = props => {
                                                 id="gui.gui.soundsTab"
                                             />
                                         </Tab>
+                                        {tabs?.map(({header: Header}, i) => (
+                                            <Tab
+                                                key={i}
+                                                className={
+                                                    tabClassNames.tab
+                                                }
+                                                onClick={
+                                                    onActivateSoundsTab
+                                                }
+                                                role="tab"
+                                                tabIndex="0"
+                                            >
+                                                <Header />
+                                            </Tab>
+                                        ))}
                                     </TabList>
                                 </Box>
                                 <TabPanel
@@ -519,6 +537,22 @@ const GUIComponent = props => {
                                             vm={vm}
                                         /> : null}
                                 </TabPanel>
+                                {tabs?.map(
+                                    ({content: TabContent}, i) => (
+                                        <TabPanel
+                                            key={i}
+                                            className={
+                                                tabClassNames.tabPanel
+                                            }
+                                            role="tabpanel"
+                                        >
+                                            {activeTabIndex === i + 3 ? (
+                                                <div className={ftrprfStyles.tabContentWrapper}>
+                                                    <TabContent vm={vm} />
+                                                </div>) : null}
+                                        </TabPanel>
+                                    )
+                                )}
                             </Tabs>
                             {backpackVisible ? (
                                 <Backpack
@@ -541,6 +575,7 @@ const GUIComponent = props => {
                                 isRtl={isRtl}
                                 stageSize={stageSize}
                                 vm={vm}
+                                FTRPRFControls={FTRPRFControls}
                                 ariaRole="region"
                                 ariaLabel={intl.formatMessage(ariaMessages.stage)}
                             />
@@ -653,7 +688,8 @@ GUIComponent.propTypes = {
     username: PropTypes.string,
     userOwnsProject: PropTypes.bool,
     hideTutorialProjects: PropTypes.bool,
-    vm: PropTypes.instanceOf(VM).isRequired
+    vm: PropTypes.instanceOf(VM).isRequired,
+    FTRPRFControls: PropTypes.element
 };
 
 GUIComponent.defaultProps = {
@@ -682,7 +718,8 @@ GUIComponent.defaultProps = {
     showComingSoon: false,
     showNewFeatureCallouts: false,
     stageSizeMode: STAGE_SIZE_MODES.large,
-    useExternalPeripheralList: false
+    useExternalPeripheralList: false,
+    FTRPRFControls: () => null
 };
 
 const mapStateToProps = state => ({
