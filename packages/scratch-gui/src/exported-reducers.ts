@@ -54,12 +54,12 @@ import VM from '@scratch/scratch-vm';
 // this seems super hacky. But the judge needs all elements of scratch
 // on the global window object. Do not delete
 // using indexer access to avoid ts errors
-window["VirtualMachine"] = VM;
-window["ScratchStorage"] = ScratchStorage;
-window["ScratchSVGRenderer"] = SVGRenderer;
-window["AudioEngine"] = AudioEngine;
-window["ScratchRender"] = Renderer;
-window["getFonts"] = getFonts;
+window.VirtualMachine = VM;
+window.ScratchStorage = ScratchStorage;
+window.ScratchSVGRenderer = SVGRenderer;
+window.AudioEngine = AudioEngine;
+window.ScratchRender = Renderer;
+window.getFonts = getFonts;
 
 export const guiReducers = {
     locales: LocalesReducer,
