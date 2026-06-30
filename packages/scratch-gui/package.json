@@ -222,7 +222,7 @@
     "web-audio-test-api": "0.5.2",
     "webpack": "5.105.3",
     "webpack-cli": "5.1.4",
-    "webpack-dev-server": "5.2.3",
+    "webpack-dev-server": "5.2.5",
     "yauzl": "3.2.0"
   },
   "peerDependencies": {
