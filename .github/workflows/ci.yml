@@ -14,9 +14,11 @@ concurrency:
 jobs:
   build:
     name: Build
-    # Run on our on-prem runners, except for PRs from other forks: this repo is
-    # public, so untrusted fork code must never reach a self-hosted runner.
-    runs-on: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) && 'ubuntu-latest' || fromJSON('["self-hosted","linux","x64"]') }}
+    # Run on our on-prem runners, except for code that may come from other forks:
+    # this repo is public, so untrusted code must never reach a self-hosted runner.
+    # That covers fork PRs and merge queue runs, since a merge group can contain a
+    # fork PR's commits. The other jobs reuse this choice through the anchor.
+    runs-on: &runner ${{ (github.event_name == 'merge_group' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository)) && 'ubuntu-latest' || fromJSON('["self-hosted","linux","x64"]') }}
     outputs:
       any-workspace: ${{ steps.filter.outputs.any-workspace }}
       packages: ${{ steps.filter.outputs.changes }}
@@ -62,7 +64,7 @@ jobs:
             packages/**/playground
 
   test:
-    runs-on: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) && 'ubuntu-latest' || fromJSON('["self-hosted","linux","x64"]') }}
+    runs-on: *runner
     needs: build
     if: ${{ needs.build.outputs.any-workspace == 'true' }}
     strategy:
@@ -89,7 +91,7 @@ jobs:
           package_name: ${{ matrix.package }}
 
   preview:
-    runs-on: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) && 'ubuntu-latest' || fromJSON('["self-hosted","linux","x64"]') }}
+    runs-on: *runner
     needs: build
     # We don't want to give forks free reign to publish to our GitHub Pages, so run this job only if both:
     # - any workspace changed (otherwise there's no work to do)
@@ -144,7 +146,7 @@ jobs:
 
   results:
     name: Test Results
-    runs-on: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) && 'ubuntu-latest' || fromJSON('["self-hosted","linux","x64"]') }}
+    runs-on: *runner
     needs: test
     if: ${{ !cancelled() }}
     steps:
