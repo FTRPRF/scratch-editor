@@ -1,0 +1,219 @@
+import React from 'react';
+import {render, act} from '@testing-library/react';
+import {Provider} from 'react-redux';
+import configureStore from 'redux-mock-store';
+
+const mockWorkspace = {};
+const mockScratchBlocks = {};
+
+jest.mock('../../../src/lib/blocks', () => () => mockScratchBlocks);
+// The error boundary / connect wrappers are not under test; use the raw class.
+jest.mock('../../../src/lib/error-boundary-hoc.jsx', () => () => Component => Component);
+
+import Blocks from '../../../src/containers/blocks.jsx';
+
+const TOOLBOX = [
+    '<xml>',
+    '<category name="Motion" id="motion"><block type="motion_movesteps"></block></category>',
+    '<category name="Looks" id="looks"><block type="looks_say"></block></category>',
+    '<category name="My Blocks" id="myBlocks" custom="PROCEDURE"></category>',
+    '</xml>'
+].join('');
+
+const makeVm = () => ({
+    addListener: jest.fn(),
+    removeListener: jest.fn(),
+    blockListener: jest.fn(),
+    flyoutBlockListener: jest.fn(),
+    monitorBlockListener: jest.fn(),
+    clearFlyoutBlocks: jest.fn(),
+    refreshWorkspace: jest.fn(),
+    getLocale: () => 'en',
+    setLocale: jest.fn(() => Promise.resolve()),
+    editingTarget: null,
+    runtime: {}
+});
+
+const makeStore = (toolboxXML = TOOLBOX) => configureStore()({
+    locales: {isRtl: false, locale: 'en', messages: {}},
+    scratchGui: {
+        modals: {},
+        mode: {isFullScreen: false},
+        toolbox: {toolboxXML},
+        customProcedures: {active: false},
+        workspaceMetrics: {targets: {}},
+        settings: {theme: 'default'},
+        timeTravel: {year: 'NOW'}
+    }
+});
+
+const resetMocks = () => {
+    const flyoutWorkspace = {registerButtonCallback: jest.fn(), addChangeListener: jest.fn()};
+    const flyout = {getWorkspace: () => flyoutWorkspace, setRecyclingEnabled: jest.fn()};
+    Object.keys(mockWorkspace).forEach(k => delete mockWorkspace[k]);
+    Object.assign(mockWorkspace, {
+        setDeveloperMode: jest.fn(),
+        setHideAndDisplayStrings: jest.fn(),
+        getFlyout: jest.fn(() => flyout),
+        setToolboxRefreshEnabled: jest.fn(),
+        addChangeListener: jest.fn(),
+        translate: jest.fn(),
+        zoom: jest.fn(),
+        setVisible: jest.fn(),
+        dispose: jest.fn(),
+        updateToolbox: jest.fn(),
+        toolbox_: {
+            getSelectedCategoryId: () => 'motion',
+            getCategoryScrollOffset: () => 0,
+            getCategoryPositionById: () => 0,
+            getCategoryLengthById: () => 10,
+            setFlyoutScrollPos: jest.fn()
+        }
+    });
+    Object.keys(mockScratchBlocks).forEach(k => delete mockScratchBlocks[k]);
+    Object.assign(mockScratchBlocks, {
+        inject: jest.fn(() => mockWorkspace),
+        hideChaff: jest.fn(),
+        FieldColourSlider: {},
+        Procedures: {},
+        ScratchMsgs: {setLocale: jest.fn()},
+        Workspace: {prototype: {}}
+    });
+};
+
+const renderBlocks = (props = {}, store = makeStore()) => {
+    const vm = makeVm();
+    const ui = extra => (
+        <Provider store={store}>
+            <Blocks
+                vm={vm}
+                stageSize="large"
+                {...props}
+                {...extra}
+            />
+        </Provider>
+    );
+    const result = render(ui());
+    return {...result, vm, rerenderWith: extra => result.rerender(ui(extra))};
+};
+
+const flushToolboxUpdate = () => act(() => {
+    jest.runAllTimers();
+});
+
+describe('Blocks container (FTRPRF additions)', () => {
+    beforeEach(() => {
+        jest.useFakeTimers();
+        resetMocks();
+    });
+    afterEach(() => {
+        jest.useRealTimers();
+    });
+
+    test('applies developer mode and strings after inject', () => {
+        renderBlocks({isInDeveloperMode: true, hideBlocksString: 'Hide', displayBlocksString: 'Show'});
+        expect(mockScratchBlocks.inject).toHaveBeenCalledTimes(1);
+        expect(mockWorkspace.setDeveloperMode).toHaveBeenCalledWith(true);
+        expect(mockWorkspace.setHideAndDisplayStrings).toHaveBeenCalledWith('Hide', 'Show');
+    });
+
+    test('defaults isInDeveloperMode to false', () => {
+        renderBlocks();
+        expect(mockWorkspace.setDeveloperMode).toHaveBeenCalledWith(false);
+    });
+
+    test('re-applies setHideAndDisplayStrings when the strings props change', () => {
+        const {rerenderWith} = renderBlocks({hideBlocksString: 'Hide', displayBlocksString: 'Show'});
+        mockWorkspace.setHideAndDisplayStrings.mockClear();
+        rerenderWith({hideBlocksString: 'Verberg', displayBlocksString: 'Toon'});
+        expect(mockWorkspace.setHideAndDisplayStrings).toHaveBeenCalledTimes(1);
+        expect(mockWorkspace.setHideAndDisplayStrings).toHaveBeenCalledWith('Verberg', 'Toon');
+    });
+
+    test('re-applies setDeveloperMode when isInDeveloperMode changes', () => {
+        const {rerenderWith} = renderBlocks({isInDeveloperMode: false});
+        mockWorkspace.setDeveloperMode.mockClear();
+        rerenderWith({isInDeveloperMode: true});
+        expect(mockWorkspace.setDeveloperMode).toHaveBeenCalledTimes(1);
+        expect(mockWorkspace.setDeveloperMode).toHaveBeenCalledWith(true);
+    });
+
+    test('does not re-apply settings when unrelated props change', () => {
+        const {rerenderWith} = renderBlocks({
+            isInDeveloperMode: false,
+            hideBlocksString: 'a',
+            displayBlocksString: 'b'
+        });
+        mockWorkspace.setDeveloperMode.mockClear();
+        mockWorkspace.setHideAndDisplayStrings.mockClear();
+        rerenderWith({stageSize: 'small'});
+        expect(mockWorkspace.setDeveloperMode).not.toHaveBeenCalled();
+        expect(mockWorkspace.setHideAndDisplayStrings).not.toHaveBeenCalled();
+    });
+
+    test('filters the toolbox when the workspace reports useful blocks', () => {
+        renderBlocks();
+        flushToolboxUpdate();
+        mockWorkspace.updateToolbox.mockClear();
+
+        act(() => {
+            mockScratchBlocks.Workspace.prototype.externalFilterToolboxCallback(['motion_movesteps']);
+        });
+        flushToolboxUpdate();
+
+        expect(mockWorkspace.updateToolbox).toHaveBeenCalledTimes(1);
+        const xml = mockWorkspace.updateToolbox.mock.calls[0][0];
+        expect(xml).toContain('motion_movesteps');
+        expect(xml).not.toContain('looks_say');
+        expect(xml).toContain('myBlocks');
+    });
+
+    test('does not filter in developer mode', () => {
+        renderBlocks({isInDeveloperMode: true});
+        flushToolboxUpdate();
+        mockWorkspace.updateToolbox.mockClear();
+
+        act(() => {
+            mockScratchBlocks.Workspace.prototype.externalFilterToolboxCallback(['motion_movesteps']);
+        });
+        flushToolboxUpdate();
+
+        expect(mockWorkspace.updateToolbox).toHaveBeenCalledWith(TOOLBOX);
+    });
+
+    // The old fork behaves like this: Blockly's own undo/redo re-creates the hidden
+    // "define Exercise blocks" block, which reports an empty list and unfilters the toolbox.
+    // Pinned on purpose (no behaviour change in this step); fixing it is a follow-up.
+    test('preserves inherited behaviour: empty useful list from undo shows full toolbox (TR-4805 follow-up)', () => {
+        renderBlocks();
+        flushToolboxUpdate();
+
+        act(() => {
+            mockScratchBlocks.Workspace.prototype.externalFilterToolboxCallback(['motion_movesteps']);
+        });
+        flushToolboxUpdate();
+        mockWorkspace.updateToolbox.mockClear();
+
+        act(() => {
+            mockScratchBlocks.Workspace.prototype.externalFilterToolboxCallback([]);
+        });
+        flushToolboxUpdate();
+
+        expect(mockWorkspace.updateToolbox).toHaveBeenCalledWith(TOOLBOX);
+    });
+
+    test('locale change does not throw when the flyout is gone', async () => {
+        mockWorkspace.getFlyout.mockReturnValueOnce({
+            getWorkspace: () => ({registerButtonCallback: jest.fn(), addChangeListener: jest.fn()}),
+            setRecyclingEnabled: jest.fn()
+        });
+        const {rerenderWith} = renderBlocks();
+        mockWorkspace.getFlyout.mockReturnValue(null);
+        const store = makeStore();
+        store.getState().locales.locale = 'nl';
+        rerenderWith({locale: 'nl'});
+        await act(async () => {
+            await Promise.resolve();
+        });
+    });
+});

@@ -15,6 +15,7 @@ import ExtensionLibrary from './extension-library.jsx';
 import extensionData from '../lib/libraries/extensions/index.jsx';
 import CustomProcedures from './custom-procedures.jsx';
 import errorBoundaryHOC from '../lib/error-boundary-hoc.jsx';
+import filterToolboxXml from '../lib/ftrprf/filter-toolbox-xml';
 import {BLOCKS_DEFAULT_SCALE, STAGE_DISPLAY_SIZES} from '../lib/layout-constants';
 import DropAreaHOC from '../lib/drop-area-hoc.jsx';
 import DragConstants from '../lib/drag-constants';
@@ -63,6 +64,7 @@ class Blocks extends React.Component {
             'handleDrop',
             'handleStatusButtonUpdate',
             'handleOpenSoundRecorder',
+            'handleUsefulBlocksCallback',
             'handlePromptStart',
             'handlePromptCallback',
             'handlePromptClose',
@@ -86,7 +88,8 @@ class Blocks extends React.Component {
         this.ScratchBlocks.recordSoundCallback = this.handleOpenSoundRecorder;
 
         this.state = {
-            prompt: null
+            prompt: null,
+            usefulBlocks: []
         };
         this.onTargetsUpdate = debounce(this.onTargetsUpdate, 100);
         this.toolboxUpdateQueue = [];
@@ -97,6 +100,8 @@ class Blocks extends React.Component {
         this.ScratchBlocks.statusButtonCallback = this.handleConnectionModalStart;
         this.ScratchBlocks.recordSoundCallback = this.handleOpenSoundRecorder;
 
+        // The FTRPRF blocks fork calls this with the opcodes an exercise considers useful.
+        this.ScratchBlocks.Workspace.prototype.externalFilterToolboxCallback = this.handleUsefulBlocksCallback;
         this.ScratchBlocks.FieldColourSlider.activateEyedropper_ = this.props.onActivateColorPicker;
         this.ScratchBlocks.Procedures.externalProcedureDefCallback = this.props.onActivateCustomProcedures;
         this.ScratchBlocks.ScratchMsgs.setLocale(this.props.locale);
@@ -107,6 +112,8 @@ class Blocks extends React.Component {
             {rtl: this.props.isRtl, toolbox: this.props.toolboxXML, colours: getColorsForMode(this.props.colorMode)}
         );
         this.workspace = this.ScratchBlocks.inject(this.blocks, workspaceConfig);
+        this.workspace.setDeveloperMode(this.props.isInDeveloperMode);
+        this.workspace.setHideAndDisplayStrings(this.props.hideBlocksString, this.props.displayBlocksString);
 
         // Register buttons under new callback keys for creating variables,
         // lists, and procedures from extensions.
@@ -162,10 +169,22 @@ class Blocks extends React.Component {
             this.props.customProceduresVisible !== nextProps.customProceduresVisible ||
             this.props.locale !== nextProps.locale ||
             this.props.anyModalVisible !== nextProps.anyModalVisible ||
-            this.props.stageSize !== nextProps.stageSize
+            this.props.stageSize !== nextProps.stageSize ||
+            this.props.isInDeveloperMode !== nextProps.isInDeveloperMode ||
+            this.props.hideBlocksString !== nextProps.hideBlocksString ||
+            this.props.displayBlocksString !== nextProps.displayBlocksString ||
+            this.state.usefulBlocks !== nextState.usefulBlocks
         );
     }
-    componentDidUpdate (prevProps) {
+    componentDidUpdate (prevProps, prevState) {
+        if (prevProps.isInDeveloperMode !== this.props.isInDeveloperMode) {
+            this.workspace.setDeveloperMode(this.props.isInDeveloperMode);
+        }
+        if (prevProps.hideBlocksString !== this.props.hideBlocksString ||
+            prevProps.displayBlocksString !== this.props.displayBlocksString) {
+            this.workspace.setHideAndDisplayStrings(this.props.hideBlocksString, this.props.displayBlocksString);
+        }
+
         // If any modals are open, call hideChaff to close z-indexed field editors
         if (this.props.anyModalVisible && !prevProps.anyModalVisible) {
             this.ScratchBlocks.hideChaff();
@@ -174,7 +193,12 @@ class Blocks extends React.Component {
         // Only rerender the toolbox when the blocks are visible and the xml is
         // different from the previously rendered toolbox xml.
         // Do not check against prevProps.toolboxXML because that may not have been rendered.
-        if (this.props.isVisible && this.props.toolboxXML !== this._renderedToolboxXML) {
+        // The same goes for the filter inputs (useful blocks, developer mode).
+        if (this.props.isVisible && (
+            this.props.toolboxXML !== this._renderedToolboxXML ||
+            prevState.usefulBlocks !== this.state.usefulBlocks ||
+            prevProps.isInDeveloperMode !== this.props.isInDeveloperMode
+        )) {
             this.requestToolboxUpdate();
         }
 
@@ -221,11 +245,14 @@ class Blocks extends React.Component {
         this.ScratchBlocks.ScratchMsgs.setLocale(this.props.locale);
         this.props.vm.setLocale(this.props.locale, this.props.messages)
             .then(() => {
-                this.workspace.getFlyout().setRecyclingEnabled(false);
+                const flyout = this.workspace.getFlyout();
+                if (!flyout) return;
+                flyout.setRecyclingEnabled(false);
                 this.props.vm.refreshWorkspace();
                 this.requestToolboxUpdate();
                 this.withToolboxUpdates(() => {
-                    this.workspace.getFlyout().setRecyclingEnabled(true);
+                    const currentFlyout = this.workspace.getFlyout();
+                    if (currentFlyout) currentFlyout.setRecyclingEnabled(true);
                 });
             });
     }
@@ -235,7 +262,7 @@ class Blocks extends React.Component {
 
         const categoryId = this.workspace.toolbox_.getSelectedCategoryId();
         const offset = this.workspace.toolbox_.getCategoryScrollOffset();
-        this.workspace.updateToolbox(this.props.toolboxXML);
+        this.workspace.updateToolbox(this.getFilteredToolboxXML());
         this._renderedToolboxXML = this.props.toolboxXML;
 
         // In order to catch any changes that mutate the toolbox during "normal runtime"
@@ -254,6 +281,21 @@ class Blocks extends React.Component {
         const queue = this.toolboxUpdateQueue;
         this.toolboxUpdateQueue = [];
         queue.forEach(fn => fn());
+    }
+
+    /**
+     * The toolbox XML to render: the full toolbox, or the exercise's useful blocks only.
+     * Developer mode and an empty useful list both show everything. The redux toolbox
+     * stays unfiltered, so clearing the list restores the full toolbox.
+     * @returns {string} toolbox XML
+     */
+    getFilteredToolboxXML () {
+        if (this.props.isInDeveloperMode) return this.props.toolboxXML;
+        return filterToolboxXml(this.props.toolboxXML, this.state.usefulBlocks);
+    }
+
+    handleUsefulBlocksCallback (usefulBlocks) {
+        this.setState({usefulBlocks: Array.isArray(usefulBlocks) ? usefulBlocks : []});
     }
 
     withToolboxUpdates (fn) {
@@ -581,6 +623,9 @@ class Blocks extends React.Component {
             updateMetrics: updateMetricsProp,
             useCatBlocks,
             workspaceMetrics,
+            hideBlocksString,
+            displayBlocksString,
+            isInDeveloperMode,
             ...props
         } = this.props;
          
@@ -659,7 +704,10 @@ Blocks.propTypes = {
     vm: PropTypes.instanceOf(VM).isRequired,
     workspaceMetrics: PropTypes.shape({
         targets: PropTypes.objectOf(PropTypes.object)
-    })
+    }),
+    hideBlocksString: PropTypes.string,
+    displayBlocksString: PropTypes.string,
+    isInDeveloperMode: PropTypes.bool
 };
 
 Blocks.defaultOptions = {
@@ -681,7 +729,8 @@ Blocks.defaultOptions = {
 Blocks.defaultProps = {
     isVisible: true,
     options: Blocks.defaultOptions,
-    colorMode: DEFAULT_MODE
+    colorMode: DEFAULT_MODE,
+    isInDeveloperMode: false
 };
 
 const mapStateToProps = state => ({
