@@ -1,3 +1,5 @@
+import assertFtrprfBlocks from './ftrprf/assert-ftrprf-blocks';
+
 /**
  * Connect scratch blocks with the vm
  * @param {VirtualMachine} vm - The scratch vm
@@ -6,6 +8,7 @@
  */
 export default function (vm, useCatBlocks) {
     const ScratchBlocks = require('scratch-blocks');
+    assertFtrprfBlocks(ScratchBlocks);
 
     // TODO: Set theme from editor settings
     if (useCatBlocks) {

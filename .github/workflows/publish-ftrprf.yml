@@ -1,0 +1,139 @@
+name: Publish @ftrprf/scratch-gui
+
+# Manual only. Builds the ref you run it on and publishes @ftrprf/scratch-gui
+# to GitHub Packages. Nothing is published from a laptop.
+# Written from scratch for the clean-room FTRPRF branch; it deliberately shares
+# nothing with the upstream publish/release workflows.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to publish, e.g. 12.7.1-ftrprf.1-rc.1 (a non -rc version is only allowed from the default branch)'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: publish-ftrprf
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    env:
+      # Never interpolate these into a `run:` script; read them as env vars.
+      INPUT_VERSION: ${{ inputs.version }}
+      SOURCE_SHA: ${{ github.sha }}
+      REF_NAME: ${{ github.ref_name }}
+      DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+      IS_DEFAULT_REF: ${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
+    steps:
+      - name: Validate the version and ref
+        run: |
+          if ! [[ "$INPUT_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+-ftrprf\.[0-9]+(-rc\.[0-9]+)?$ ]]; then
+            echo "::error::version must look like 12.7.1-ftrprf.1 or 12.7.1-ftrprf.1-rc.1"
+            exit 1
+          fi
+          if [[ "$INPUT_VERSION" != *-rc.* && "$IS_DEFAULT_REF" != "true" ]]; then
+            echo "::error::a non -rc version can only be published from the default branch ($DEFAULT_BRANCH), not $REF_NAME"
+            exit 1
+          fi
+          if [[ "$INPUT_VERSION" == *-rc.* ]]; then
+            echo "NPM_TAG=rc" >> "$GITHUB_ENV"
+          else
+            echo "NPM_TAG=latest" >> "$GITHUB_ENV"
+          fi
+
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
+        with:
+          persist-credentials: false
+
+      # node-version-file reads this ref's .nvmrc. No `cache:` on purpose: a
+      # publish job should not restore anything another run could have written.
+      - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6
+        with:
+          node-version-file: '.nvmrc'
+          registry-url: https://npm.pkg.github.com
+          scope: '@ftrprf'
+
+      # scratch-paint -> paper.js -> canvas needs these to build.
+      - name: Install system libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev
+
+      - name: Install dependencies
+        run: NODE_ENV=development npm ci
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # scratch-gui consumes the other workspaces' built output, so they go
+      # first; the integration tests also need scratch-gui's own build/.
+      - name: Build workspace dependencies
+        run: |
+          npm run build --workspace packages/scratch-svg-renderer
+          npm run build --workspace packages/scratch-render
+          npm run build --workspace packages/scratch-vm
+        env:
+          NODE_ENV: production
+
+      - name: Build scratch-gui
+        run: npm run build --workspace packages/scratch-gui
+        env:
+          NODE_ENV: production
+
+      - name: Test scratch-gui
+        run: |
+          # The runner image ships ChromeDriver outside PATH.
+          export PATH="$CHROMEWEBDRIVER:$PATH"
+          npm test --workspace packages/scratch-gui
+        env:
+          CI: 'true'
+
+      - name: Assert the built bundle is the FTRPRF one
+        run: node scripts/ftrprf/assert-gui-bundle.mjs packages/scratch-gui/dist
+
+      - name: Assert only the FTRPRF scratch-blocks ships
+        run: |
+          npm ls scratch-blocks --workspace packages/scratch-gui --omit=dev | tee ls.txt
+          # Exactly one scratch-blocks entry, and it must be the FTRPRF alias.
+          if [ "$(grep -c 'scratch-blocks@' ls.txt)" != "1" ] ||
+             ! grep -q 'scratch-blocks@npm:@ftrprf/scratch-blocks@' ls.txt; then
+            echo '::error::scratch-gui must depend only on the @ftrprf/scratch-blocks alias'
+            exit 1
+          fi
+          rm ls.txt
+
+      # GitHub Packages only accepts a package under the owner's scope, so the
+      # upstream @scratch/scratch-gui name is rewritten for publishing.
+      - name: Set the package name, version and source commit
+        run: |
+          npm pkg set name="@ftrprf/scratch-gui" --workspace packages/scratch-gui
+          npm pkg set version="$INPUT_VERSION" --workspace packages/scratch-gui
+          npm pkg set ftrprf.sourceCommit="$SOURCE_SHA" --workspace packages/scratch-gui
+          npm pkg set publishConfig.registry="https://npm.pkg.github.com" --workspace packages/scratch-gui
+
+      - name: Check the tarball contents
+        run: |
+          npm pack --dry-run --json --ignore-scripts --workspace packages/scratch-gui > pack.json
+          node -e '
+            const pack = JSON.parse(require("fs").readFileSync("pack.json", "utf8"))[0];
+            const listed = new Set(pack.files.map(f => f.path));
+            const need = ["package.json", "dist/scratch-gui.js", "dist/extension-worker.js", "dist/types/index.d.ts"];
+            const missing = need.filter(f => !listed.has(f));
+            if (missing.length) {
+              console.error("Not in the tarball: " + missing.join(", "));
+              process.exit(1);
+            }
+            console.log(pack.name + "@" + pack.version + ": " + listed.size + " files, all required present");
+          '
+          rm pack.json
+
+      # Scripts are skipped: everything was built and tested above.
+      - name: Publish
+        run: npm publish --workspace packages/scratch-gui --ignore-scripts --tag "$NPM_TAG"
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
