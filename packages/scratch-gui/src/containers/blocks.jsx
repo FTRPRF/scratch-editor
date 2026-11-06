@@ -285,13 +285,30 @@ class Blocks extends React.Component {
 
     /**
      * The toolbox XML to render: the full toolbox, or the exercise's useful blocks only.
-     * Developer mode and an empty useful list both show everything. The redux toolbox
-     * stays unfiltered, so clearing the list restores the full toolbox.
+     * Developer mode shows everything. The redux toolbox stays unfiltered.
+     *
+     * Parity with the old fork: an empty useful list (e.g. Blockly undo/redo re-creating the
+     * hidden define block) does NOT unfilter by itself; the last filtered toolbox keeps rendering
+     * until the toolbox XML is regenerated (sprite switch, extension, locale, project load).
      * @returns {string} toolbox XML
      */
     getFilteredToolboxXML () {
-        if (this.props.isInDeveloperMode) return this.props.toolboxXML;
-        return filterToolboxXml(this.props.toolboxXML, this.state.usefulBlocks);
+        const {toolboxXML, isInDeveloperMode} = this.props;
+        const {usefulBlocks} = this.state;
+        if (isInDeveloperMode) {
+            this._lastFiltered = null;
+            return toolboxXML;
+        }
+        if (usefulBlocks.length > 0) {
+            const xml = filterToolboxXml(toolboxXML, usefulBlocks);
+            this._lastFiltered = {source: toolboxXML, xml};
+            return xml;
+        }
+        if (this._lastFiltered && this._lastFiltered.source === toolboxXML) {
+            return this._lastFiltered.xml;
+        }
+        this._lastFiltered = null;
+        return toolboxXML;
     }
 
     handleUsefulBlocksCallback (usefulBlocks) {

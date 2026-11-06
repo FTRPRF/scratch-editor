@@ -20,7 +20,7 @@ const TOOLBOX = [
     '</xml>'
 ].join('');
 
-const makeVm = () => ({
+const makeVm = (overrides = {}) => ({
     addListener: jest.fn(),
     removeListener: jest.fn(),
     blockListener: jest.fn(),
@@ -31,7 +31,8 @@ const makeVm = () => ({
     getLocale: () => 'en',
     setLocale: jest.fn(() => Promise.resolve()),
     editingTarget: null,
-    runtime: {}
+    runtime: {},
+    ...overrides
 });
 
 const makeStore = (toolboxXML = TOOLBOX) => configureStore()({
@@ -43,7 +44,8 @@ const makeStore = (toolboxXML = TOOLBOX) => configureStore()({
         customProcedures: {active: false},
         workspaceMetrics: {targets: {}},
         settings: {theme: 'default'},
-        timeTravel: {year: 'NOW'}
+        timeTravel: {year: 'NOW'},
+        assetDrag: {dragging: false}
     }
 });
 
@@ -81,10 +83,10 @@ const resetMocks = () => {
     });
 };
 
-const renderBlocks = (props = {}, store = makeStore()) => {
-    const vm = makeVm();
-    const ui = extra => (
-        <Provider store={store}>
+const renderBlocks = (props = {}, store = makeStore(), vmOverrides = {}) => {
+    const vm = makeVm(vmOverrides);
+    const ui = (extra, nextStore = store) => (
+        <Provider store={nextStore}>
             <Blocks
                 vm={vm}
                 stageSize="large"
@@ -94,7 +96,7 @@ const renderBlocks = (props = {}, store = makeStore()) => {
         </Provider>
     );
     const result = render(ui());
-    return {...result, vm, rerenderWith: extra => result.rerender(ui(extra))};
+    return {...result, vm, rerenderWith: (extra, nextStore) => result.rerender(ui(extra, nextStore))};
 };
 
 const flushToolboxUpdate = () => act(() => {
@@ -181,39 +183,49 @@ describe('Blocks container (FTRPRF additions)', () => {
         expect(mockWorkspace.updateToolbox).toHaveBeenCalledWith(TOOLBOX);
     });
 
-    // The old fork behaves like this: Blockly's own undo/redo re-creates the hidden
-    // "define Exercise blocks" block, which reports an empty list and unfilters the toolbox.
-    // Pinned on purpose (no behaviour change in this step); fixing it is a follow-up.
-    test('preserves inherited behaviour: empty useful list from undo shows full toolbox (TR-4805 follow-up)', () => {
-        renderBlocks();
+    // Old fork parity: the filtered XML lived in redux, so an empty list (Blockly undo/redo
+    // re-creating the hidden define block) left the toolbox filtered until the toolbox XML was
+    // regenerated. Unfiltering happens only on regeneration, not on the [] callback itself.
+    test('preserves old-fork behaviour: undo ([]) keeps the filtered toolbox until the next regeneration', () => {
+        const {rerenderWith} = renderBlocks();
         flushToolboxUpdate();
 
         act(() => {
             mockScratchBlocks.Workspace.prototype.externalFilterToolboxCallback(['motion_movesteps']);
         });
         flushToolboxUpdate();
-        mockWorkspace.updateToolbox.mockClear();
+        const filtered = mockWorkspace.updateToolbox.mock.calls.slice(-1)[0][0];
+        expect(filtered).not.toContain('looks_say');
 
+        mockWorkspace.updateToolbox.mockClear();
         act(() => {
             mockScratchBlocks.Workspace.prototype.externalFilterToolboxCallback([]);
         });
         flushToolboxUpdate();
+        expect(mockWorkspace.updateToolbox).toHaveBeenCalledTimes(1);
+        expect(mockWorkspace.updateToolbox).toHaveBeenLastCalledWith(filtered);
 
-        expect(mockWorkspace.updateToolbox).toHaveBeenCalledWith(TOOLBOX);
+        // Regeneration: the toolboxXML prop changes (mapStateToProps reads the store).
+        mockWorkspace.updateToolbox.mockClear();
+        const regenerated = TOOLBOX.replace('</xml>', '<sep></sep></xml>');
+        rerenderWith({}, makeStore(regenerated));
+        flushToolboxUpdate();
+        expect(mockWorkspace.updateToolbox).toHaveBeenLastCalledWith(regenerated);
     });
 
-    test('locale change does not throw when the flyout is gone', async () => {
-        mockWorkspace.getFlyout.mockReturnValueOnce({
-            getWorkspace: () => ({registerButtonCallback: jest.fn(), addChangeListener: jest.fn()}),
-            setRecyclingEnabled: jest.fn()
+    test('locale change skips the flyout work when the flyout is gone', async () => {
+        let resolveLocale;
+        const {vm} = renderBlocks({}, makeStore(), {
+            setLocale: jest.fn(() => new Promise(resolve => {
+                resolveLocale = resolve;
+            }))
         });
-        const {rerenderWith} = renderBlocks();
+        vm.refreshWorkspace.mockClear();
         mockWorkspace.getFlyout.mockReturnValue(null);
-        const store = makeStore();
-        store.getState().locales.locale = 'nl';
-        rerenderWith({locale: 'nl'});
         await act(async () => {
+            resolveLocale();
             await Promise.resolve();
         });
+        expect(vm.refreshWorkspace).not.toHaveBeenCalled();
     });
 });
