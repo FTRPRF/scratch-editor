@@ -63,6 +63,7 @@ const SpriteSelectorComponent = function (props) {
         onSurpriseSpriteClick,
         raised,
         selectedId,
+        spriteActionPolicy,
         spriteFileInput,
         sprites,
         stageSize,
@@ -111,6 +112,7 @@ const SpriteSelectorComponent = function (props) {
                 onDuplicateSprite={onDuplicateSprite}
                 onExportSprite={onExportSprite}
                 onSelectSprite={onSelectSprite}
+                spriteActionPolicy={spriteActionPolicy}
             />
             <ActionMenu
                 className={styles.addButton}
@@ -171,6 +173,7 @@ SpriteSelectorComponent.propTypes = {
     onSurpriseSpriteClick: PropTypes.func,
     raised: PropTypes.bool,
     selectedId: PropTypes.string,
+    spriteActionPolicy: PropTypes.func,
     spriteFileInput: PropTypes.func,
     sprites: PropTypes.shape({
         id: PropTypes.shape({

@@ -110,6 +110,9 @@ const ariaMessages = defineMessages({
 // Assume that it doesn't change for a session.
 let isRendererSupported = null;
 
+// Code, Costumes and Sounds occupy tab indices 0-2; FTRPRF custom tabs follow.
+const FIRST_CUSTOM_TAB_INDEX = 3;
+
 const GUIComponent = props => {
     const intl = useIntl();
     const {
@@ -148,6 +151,9 @@ const GUIComponent = props => {
         onTutorialSelect,
         enableCommunity,
         hasActiveMembership,
+        hideBlocksString,
+        displayBlocksString,
+        isInDeveloperMode,
         isCreating,
         isFetchingUserData,
         isFullScreen,
@@ -190,6 +196,8 @@ const GUIComponent = props => {
         onUpdateProjectThumbnail,
         showComingSoon,
         soundsTabVisible,
+        spriteActionPolicy,
+        tabs,
         stageSizeMode,
         targetIsStage,
         telemetryModalVisible,
@@ -461,6 +469,19 @@ const GUIComponent = props => {
                                                 id="gui.gui.soundsTab"
                                             />
                                         </Tab>
+                                        {(tabs || []).map((tab, i) => {
+                                            const TabHeader = tab.header;
+                                            return (
+                                                <Tab
+                                                    className={tabClassNames.tab}
+                                                    key={`ftrprf-tab-${i}`}
+                                                    role="tab"
+                                                    tabIndex="0"
+                                                >
+                                                    <TabHeader {...tab.headerProps} />
+                                                </Tab>
+                                            );
+                                        })}
                                     </TabList>
                                 </Box>
                                 <TabPanel
@@ -476,7 +497,10 @@ const GUIComponent = props => {
                                         <Blocks
                                             key={`${blocksId}/${colorMode}/${theme}`}
                                             canUseCloud={canUseCloud}
+                                            displayBlocksString={displayBlocksString}
                                             grow={1}
+                                            hideBlocksString={hideBlocksString}
+                                            isInDeveloperMode={isInDeveloperMode}
                                             isVisible={blocksTabVisible}
                                             options={{
                                                 media: `${basePath}static/${colorModeMap[colorMode].blocksMediaFolder}/`
@@ -519,6 +543,19 @@ const GUIComponent = props => {
                                             vm={vm}
                                         /> : null}
                                 </TabPanel>
+                                {(tabs || []).map((tab, i) => {
+                                    const TabContent = tab.content;
+                                    return (
+                                        <TabPanel
+                                            className={classNames(tabClassNames.tabPanel, 'ftrprf-tab-panel')}
+                                            key={`ftrprf-panel-${i}`}
+                                            role="tabpanel"
+                                        >
+                                            {activeTabIndex === FIRST_CUSTOM_TAB_INDEX + i ?
+                                                <TabContent vm={vm} /> : null}
+                                        </TabPanel>
+                                    );
+                                })}
                             </Tabs>
                             {backpackVisible ? (
                                 <Backpack
@@ -553,6 +590,7 @@ const GUIComponent = props => {
                                 <TargetPane
                                     stageSize={stageSize}
                                     vm={vm}
+                                    spriteActionPolicy={spriteActionPolicy}
                                     onNewSpriteClick={onNewSpriteClick}
                                     onNewBackdropClick={onNewLibraryBackdropClick}
                                 />
@@ -653,6 +691,21 @@ GUIComponent.propTypes = {
     username: PropTypes.string,
     userOwnsProject: PropTypes.bool,
     hideTutorialProjects: PropTypes.bool,
+    // Space-separated opcode lists forwarded to Blocks (exercise toolbox filtering)
+    hideBlocksString: PropTypes.string,
+    displayBlocksString: PropTypes.string,
+    isInDeveloperMode: PropTypes.bool,
+    /**
+     * Decides whether an action is offered for a sprite; false for 'delete' hides the delete
+     * button and context-menu item. Defaults to upstream behaviour (everything allowed).
+     */
+    spriteActionPolicy: PropTypes.func,
+    /** Extra tabs rendered after Code/Costumes/Sounds. Content renders only while active. */
+    tabs: PropTypes.arrayOf(PropTypes.shape({
+        header: PropTypes.elementType.isRequired,
+        headerProps: PropTypes.object,
+        content: PropTypes.elementType.isRequired
+    })),
     vm: PropTypes.instanceOf(VM).isRequired
 };
 
@@ -681,6 +734,7 @@ GUIComponent.defaultProps = {
     menuBarHidden: false,
     showComingSoon: false,
     showNewFeatureCallouts: false,
+    spriteActionPolicy: () => true,
     stageSizeMode: STAGE_SIZE_MODES.large,
     useExternalPeripheralList: false
 };
