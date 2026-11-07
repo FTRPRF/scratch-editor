@@ -113,6 +113,10 @@ const distConfig = baseConfig.clone()
         entry: {
             'scratch-gui': path.join(__dirname, 'src/index.ts')
         },
+        // FTRPRF: full column-level source map for the shipped library, so consumers can
+        // chain it and resolve Scratch frames in Sentry. The default cheap-module-source-map
+        // only maps lines, which is useless for a minified bundle on two lines.
+        devtool: 'source-map',
         output: {
             // We need the public path to be relative, because of scratch-desktop and scratch-android
             // - if the publicPath is static here (defaults to `/`), they are unable to load their assets,
