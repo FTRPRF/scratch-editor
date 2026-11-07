@@ -183,7 +183,8 @@ jobs:
 
       - name: Publish the packed tarball
         run: |
-          tgz="pack/ftrprf-scratch-gui-${INPUT_VERSION}.tgz"
+          # ./ prefix: a bare "pack/x.tgz" is read as a GitHub owner/repo shorthand.
+          tgz="./pack/ftrprf-scratch-gui-${INPUT_VERSION}.tgz"
           if [ "$(ls pack | wc -l)" != "1" ] || [ ! -f "$tgz" ]; then
             echo "::error::expected exactly $tgz in the build artifact"; ls -l pack; exit 1
           fi
