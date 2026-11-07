@@ -30,6 +30,13 @@ export const REQUIRED_DIST = [
 
 export const BUNDLE_MARKER = 'setHideAndDisplayStrings';
 
+// The SVG sanitizer must run with DOMPurify's svgFilters profile, or every
+// <fe*> primitive is stripped from costumes on load (TR-4805). The sanitizer is
+// bundled from the workspace svg-renderer source, so a bundle without this means
+// the npm @scratch/scratch-svg-renderer (or a stale build) was bundled instead.
+// Matches both minified (`svgFilters:!0`) and unminified (`svgFilters: true`) output.
+export const SVG_FILTERS_MARKER = /USE_PROFILES:\s*\{\s*svg:\s*(?:!0|true),\s*svgFilters:\s*(?:!0|true)\s*\}/;
+
 export const checkDist = distDir => {
     const problems = [];
 
@@ -52,11 +59,20 @@ export const checkDist = distDir => {
     }
 
     const bundle = path.join(distDir, 'scratch-gui.js');
-    if (fs.existsSync(bundle) && !fs.readFileSync(bundle, 'utf8').includes(BUNDLE_MARKER)) {
-        problems.push(
-            `scratch-gui.js does not contain "${BUNDLE_MARKER}": ` +
-            'the stock scratch-blocks was bundled instead of @ftrprf/scratch-blocks'
-        );
+    if (fs.existsSync(bundle)) {
+        const source = fs.readFileSync(bundle, 'utf8');
+        if (!source.includes(BUNDLE_MARKER)) {
+            problems.push(
+                `scratch-gui.js does not contain "${BUNDLE_MARKER}": ` +
+                'the stock scratch-blocks was bundled instead of @ftrprf/scratch-blocks'
+            );
+        }
+        if (!SVG_FILTERS_MARKER.test(source)) {
+            problems.push(
+                'scratch-gui.js does not sanitize SVG with the svgFilters profile: ' +
+                'the FTRPRF scratch-svg-renderer was not bundled, so costume filter effects would be stripped'
+            );
+        }
     }
 
     return problems;
@@ -73,7 +89,7 @@ const main = () => {
         for (const problem of problems) console.error(`FAIL ${problem}`);
         process.exit(1);
     }
-    console.log(`OK ${distDir}: ${REQUIRED_DIST.length} required entries present, bundle contains ${BUNDLE_MARKER}`);
+    console.log(`OK ${distDir}: ${REQUIRED_DIST.length} required entries present, bundle contains ${BUNDLE_MARKER} and the svgFilters sanitizer`);
 };
 
 // Only run when executed directly, so the checks stay importable.

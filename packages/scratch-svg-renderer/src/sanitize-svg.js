@@ -170,13 +170,21 @@ sanitizeSvg.sanitizeByteStream = function (rawData) {
  * Load an SVG string and "sanitize" it. This is more aggressive than the handling in
  * fixup-svg-string.js, and thus more risky; there are known examples of SVGs that
  * it will clobber. We use DOMPurify's svg profile, which restricts many types of tag.
+ *
+ * FTRPRF: the svgFilters profile is enabled too. Without it every <fe*> primitive is
+ * stripped and an empty <filter> is left behind, so glow / drop-shadow costumes lose
+ * their effect, and an element drawn through the empty filter is not rendered at all.
+ * The profile adds tags only (its attributes are the same svg + xml sets the svg
+ * profile already allows), and the hooks above still strip every external href and
+ * CSS url(). feImage is forbidden anyway: it is the only filter primitive that loads a
+ * resource, and keeping it out means that does not rest on the href hook alone.
  * @param {!string} rawSvgText unsanitized SVG string
  * @returns {string} sanitized SVG text
  */
 sanitizeSvg.sanitizeSvgText = function (rawSvgText) {
     let sanitizedText = DOMPurify.sanitize(rawSvgText, {
-        USE_PROFILES: {svg: true},
-        FORBID_TAGS: ['a', 'audio', 'canvas', 'video'],
+        USE_PROFILES: {svg: true, svgFilters: true},
+        FORBID_TAGS: ['a', 'audio', 'canvas', 'video', 'feImage'],
         // Allow data URI in image tags (e.g. SVGs converted from bitmap)
         ADD_DATA_URI_TAGS: ['image']
     });
