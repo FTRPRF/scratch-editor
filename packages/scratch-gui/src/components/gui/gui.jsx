@@ -529,6 +529,7 @@ const GUIComponent = props => {
                                         ariaRole="region"
                                         vm={vm}
                                         onNewLibraryBackdropClick={onNewLibraryBackdropClick}
+                                        spriteActionPolicy={spriteActionPolicy}
                                         onNewLibraryCostumeClick={onNewLibraryCostumeClick}
                                     /> : null}
                                 </TabPanel>
@@ -540,6 +541,7 @@ const GUIComponent = props => {
                                         <SoundTab
                                             ariaLabel={intl.formatMessage(ariaMessages.soundsPanel)}
                                             ariaRole="region"
+                                            spriteActionPolicy={spriteActionPolicy}
                                             vm={vm}
                                         /> : null}
                                 </TabPanel>
@@ -691,13 +693,14 @@ GUIComponent.propTypes = {
     username: PropTypes.string,
     userOwnsProject: PropTypes.bool,
     hideTutorialProjects: PropTypes.bool,
-    // Space-separated opcode lists forwarded to Blocks (exercise toolbox filtering)
+    // Localised labels for the developer-mode "hide blocks" / "display blocks" context-menu items
     hideBlocksString: PropTypes.string,
     displayBlocksString: PropTypes.string,
     isInDeveloperMode: PropTypes.bool,
     /**
-     * Decides whether an action is offered for a sprite; false for 'delete' hides the delete
-     * button and context-menu item. Defaults to upstream behaviour (everything allowed).
+     * Decides whether an action is offered, called as (action, id). Actions: 'delete' (sprite
+     * list), 'delete-costume' (Costumes tab), 'delete-sound' (Sounds tab); false hides that
+     * delete button and context-menu item. Defaults to upstream behaviour (everything allowed).
      */
     spriteActionPolicy: PropTypes.func,
     /** Extra tabs rendered after Code/Costumes/Sounds. Content renders only while active. */

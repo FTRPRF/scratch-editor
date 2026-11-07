@@ -5,6 +5,7 @@ import VM from '@scratch/scratch-vm';
 import {fireEvent, waitFor} from '@testing-library/react';
 import {renderWithIntl} from '../../helpers/intl-helpers.jsx';
 import SpriteSelectorItem from '../../../src/containers/sprite-selector-item.jsx';
+import Selector from '../../../src/components/asset-panel/selector.jsx';
 
 // Necessary for the RadixUI context menu
 global.MutationObserver = class {
@@ -23,7 +24,8 @@ const store = configureStore()({
         assetDrag: {dragging: false},
         hoveredTarget: {receivedBlocks: false, sprite: null},
         vm: new VM()
-    }
+    },
+    locales: {isRtl: false}
 });
 
 const renderItem = (props = {}) => renderWithIntl(
@@ -62,5 +64,46 @@ describe('sprite action policy', () => {
         expect(view.container.querySelector('button[aria-label="Delete"]')).toBeNull();
         await openContextMenu(view);
         expect(view.queryByText(/delete/i)).toBeNull();
+    });
+
+    test.each(['delete-costume', 'delete-sound'])(
+        'asset list checks %s as its own action and hides delete when denied',
+        async deleteAction => {
+            const spriteActionPolicy = jest.fn(action => action === 'delete');
+            const view = renderItem({deleteAction, id: 0, spriteActionPolicy});
+            expect(spriteActionPolicy).toHaveBeenCalledWith(deleteAction, 0);
+            expect(spriteActionPolicy).not.toHaveBeenCalledWith('delete', expect.anything());
+            expect(view.container.querySelector('button[aria-label="Delete"]')).toBeNull();
+            await openContextMenu(view);
+            expect(view.queryByText(/delete/i)).toBeNull();
+        }
+    );
+
+    test.each(['delete-costume', 'delete-sound'])('asset list shows delete when %s is allowed', async deleteAction => {
+        const view = renderItem({deleteAction, id: 0, spriteActionPolicy: action => action === deleteAction});
+        expect(view.container.querySelector('button[aria-label="Delete"]')).not.toBeNull();
+        await openContextMenu(view);
+        expect(view.queryByText(/delete/i)).not.toBeNull();
+    });
+
+    test('asset-panel selector forwards the policy and its delete action to every item', () => {
+        const spriteActionPolicy = jest.fn(() => false);
+        const view = renderWithIntl(
+            <Provider store={store}>
+                <Selector
+                    buttons={[]}
+                    deleteAction="delete-costume"
+                    items={[{name: 'costume1', url: 'https://example.invalid/c1.svg'},
+                        {name: 'costume2', url: 'https://example.invalid/c2.svg'}]}
+                    selectedItemIndex={0}
+                    spriteActionPolicy={spriteActionPolicy}
+                    onDeleteClick={jest.fn()}
+                    onItemClick={jest.fn()}
+                />
+            </Provider>
+        );
+        expect(spriteActionPolicy).toHaveBeenCalledWith('delete-costume', 0);
+        expect(spriteActionPolicy).toHaveBeenCalledWith('delete-costume', 1);
+        expect(view.container.querySelector('button[aria-label="Delete"]')).toBeNull();
     });
 });
