@@ -278,6 +278,7 @@ class SoundTab extends React.Component {
                     img: searchIcon,
                     onClick: this.handleNewSoundFromLibraryClick
                 }]}
+                deleteAction="delete-sound"
                 dragType={DragConstants.SOUND}
                 isRtl={isRtl}
                 items={sounds}
@@ -286,6 +287,7 @@ class SoundTab extends React.Component {
                 onDrop={this.handleDrop}
                 onDuplicateClick={this.handleDuplicateSound}
                 onExportClick={this.handleExportSound}
+                spriteActionPolicy={this.props.spriteActionPolicy}
                 onItemClick={this.handleSelectSound}
             >
                 {sprite.sounds && sprite.sounds[this.state.selectedSoundIndex] ? (
@@ -335,6 +337,8 @@ SoundTab.propTypes = {
             name: PropTypes.string.isRequired
         }))
     }),
+    /** FTRPRF: decides whether 'delete-sound' is offered; see SpriteSelectorItem. */
+    spriteActionPolicy: PropTypes.func,
     vm: PropTypes.instanceOf(VM).isRequired,
     dynamicSounds: PropTypes.arrayOf(soundShape)
 };

@@ -1,7 +1,7 @@
 import classNames from 'classnames';
 import omit from 'lodash.omit';
 import PropTypes from 'prop-types';
-import React, {useEffect, useCallback} from 'react';
+import React, {useEffect, useCallback, useLayoutEffect, useRef} from 'react';
 import {defineMessages, FormattedMessage, useIntl} from 'react-intl';
 import {connect} from 'react-redux';
 import MediaQuery from 'react-responsive';
@@ -45,6 +45,7 @@ import soundsIcon from './icon--sounds.svg';
 import DebugModal from '../debug-modal/debug-modal.jsx';
 import {setPlatform} from '../../reducers/platform.js';
 import {setTheme} from '../../reducers/settings.js';
+import {BLOCKS_TAB_INDEX} from '../../reducers/editor-tab.js';
 import {PLATFORM} from '../../lib/platform.js';
 import {MenuRefProvider} from '../../contexts/menu-ref-context.jsx';
 import {ModalFocusProvider} from '../../contexts/modal-focus-context.jsx';
@@ -110,6 +111,20 @@ const ariaMessages = defineMessages({
 // Cache this value to only retrieve it once the first time.
 // Assume that it doesn't change for a session.
 let isRendererSupported = null;
+
+// Code, Costumes and Sounds occupy tab indices 0-2; FTRPRF custom tabs follow.
+const FIRST_CUSTOM_TAB_INDEX = 3;
+
+// A stable React key for an FTRPRF custom tab: its `id`, else its header's
+// translationKey (which the @ftrprf/scratch wrapper sets on every tab), else
+// its position. A stable key keeps each tab's state with that tab when an
+// earlier one comes or goes.
+const customTabKey = (tab, index) => {
+    if (typeof tab.id === 'string' && tab.id) return tab.id;
+    const translationKey = tab.headerProps && tab.headerProps.translationKey;
+    if (typeof translationKey === 'string' && translationKey) return translationKey;
+    return `index-${index}`;
+};
 
 const GUIComponent = props => {
     const intl = useIntl();
@@ -197,7 +212,9 @@ const GUIComponent = props => {
         showComingSoon,
         showNewFeatureCallouts,
         soundsTabVisible,
+        spriteActionPolicy,
         stageSizeMode,
+        tabs,
         targetIsStage,
         telemetryModalVisible,
         colorMode,
@@ -233,6 +250,21 @@ const GUIComponent = props => {
             props.setTheme(DEFAULT_THEME);
         }
     }, [theme, hasActiveMembership, props.setTheme]);
+
+    // activeTabIndex is an absolute index, so when the custom tab list changes
+    // under a selected custom tab, follow that tab by its key to its new index,
+    // or fall back to the Code tab if it is gone.
+    const customTabKeys = (tabs || []).map(customTabKey);
+    const previousCustomTabKeys = useRef(customTabKeys);
+    useLayoutEffect(() => {
+        const previousKeys = previousCustomTabKeys.current;
+        previousCustomTabKeys.current = customTabKeys;
+        const previousPosition = activeTabIndex - FIRST_CUSTOM_TAB_INDEX;
+        if (previousPosition < 0 || previousPosition >= previousKeys.length) return;
+        const position = customTabKeys.indexOf(previousKeys[previousPosition]);
+        const nextIndex = position === -1 ? BLOCKS_TAB_INDEX : FIRST_CUSTOM_TAB_INDEX + position;
+        if (nextIndex !== activeTabIndex) onActivateTab(nextIndex);
+    }, [customTabKeys.join('\n')]);
 
     const tabClassNames = {
         tabs: styles.tabs,
@@ -468,6 +500,19 @@ const GUIComponent = props => {
                                                 id="gui.gui.soundsTab"
                                             />
                                         </Tab>
+                                        {(tabs || []).map((tab, i) => {
+                                            const TabHeader = tab.header;
+                                            return (
+                                                <Tab
+                                                    className={tabClassNames.tab}
+                                                    key={`ftrprf-tab-${customTabKey(tab, i)}`}
+                                                    role="tab"
+                                                    tabIndex="0"
+                                                >
+                                                    <TabHeader {...tab.headerProps} />
+                                                </Tab>
+                                            );
+                                        })}
                                     </TabList>
                                 </Box>
                                 <TabPanel
@@ -515,6 +560,7 @@ const GUIComponent = props => {
                                             intl.formatMessage(ariaMessages.costumesPanel)}
                                         ariaRole="region"
                                         vm={vm}
+                                        spriteActionPolicy={spriteActionPolicy}
                                         onNewLibraryBackdropClick={onNewLibraryBackdropClick}
                                         onNewLibraryCostumeClick={onNewLibraryCostumeClick}
                                     /> : null}
@@ -527,9 +573,23 @@ const GUIComponent = props => {
                                         <SoundTab
                                             ariaLabel={intl.formatMessage(ariaMessages.soundsPanel)}
                                             ariaRole="region"
+                                            spriteActionPolicy={spriteActionPolicy}
                                             vm={vm}
                                         /> : null}
                                 </TabPanel>
+                                {(tabs || []).map((tab, i) => {
+                                    const TabContent = tab.content;
+                                    return (
+                                        <TabPanel
+                                            className={classNames(tabClassNames.tabPanel, 'ftrprf-tab-panel')}
+                                            key={`ftrprf-panel-${customTabKey(tab, i)}`}
+                                            role="tabpanel"
+                                        >
+                                            {activeTabIndex === FIRST_CUSTOM_TAB_INDEX + i ?
+                                                <TabContent vm={vm} /> : null}
+                                        </TabPanel>
+                                    );
+                                })}
                             </Tabs>
                             {backpackVisible && backpackConfigured ? (
                                 <Backpack
@@ -573,6 +633,7 @@ const GUIComponent = props => {
                                 <TargetPane
                                     stageSize={stageSize}
                                     vm={vm}
+                                    spriteActionPolicy={spriteActionPolicy}
                                     onNewSpriteClick={onNewSpriteClick}
                                     onNewBackdropClick={onNewLibraryBackdropClick}
                                 />
@@ -667,6 +728,19 @@ GUIComponent.propTypes = {
     showComingSoon: PropTypes.bool,
     showNewFeatureCallouts: PropTypes.bool,
     soundsTabVisible: PropTypes.bool,
+    /**
+     * Decides whether an action is offered, called as (action, id). Actions: 'delete' (sprite
+     * list), 'delete-costume' (Costumes tab), 'delete-sound' (Sounds tab); false hides that
+     * delete button and context-menu item. Defaults to upstream behaviour (everything allowed).
+     */
+    spriteActionPolicy: PropTypes.func,
+    /** Extra tabs rendered after Code/Costumes/Sounds. Content renders only while active. */
+    tabs: PropTypes.arrayOf(PropTypes.shape({
+        id: PropTypes.string, // stable React key; see customTabKey
+        header: PropTypes.elementType.isRequired,
+        headerProps: PropTypes.object,
+        content: PropTypes.elementType.isRequired
+    })),
     stageSizeMode: PropTypes.oneOf(Object.keys(STAGE_SIZE_MODES)),
     setPlatform: PropTypes.func,
     targetIsStage: PropTypes.bool,
@@ -683,6 +757,7 @@ GUIComponent.propTypes = {
 };
 
 GUIComponent.defaultProps = {
+    spriteActionPolicy: () => true,
     backpackHost: null,
     backpackVisible: false,
     basePath: './',

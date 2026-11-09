@@ -30,6 +30,7 @@ const SpriteList = function (props) {
         ordering,
         raised,
         selectedId,
+        spriteActionPolicy,
         items
     } = props;
 
@@ -91,6 +92,7 @@ const SpriteList = function (props) {
                                 key={sprite.id}
                                 name={sprite.name}
                                 selected={sprite.id === selectedId}
+                                spriteActionPolicy={spriteActionPolicy}
                                 onClick={onSelectSprite}
                                 onDeleteButtonClick={onDeleteSprite}
                                 onDuplicateButtonClick={onDuplicateSprite}
@@ -135,7 +137,8 @@ SpriteList.propTypes = {
     onSelectSprite: PropTypes.func,
     ordering: PropTypes.arrayOf(PropTypes.number),
     raised: PropTypes.bool,
-    selectedId: PropTypes.string
+    selectedId: PropTypes.string,
+    spriteActionPolicy: PropTypes.func
 };
 
 export default SortableHOC(SpriteList);

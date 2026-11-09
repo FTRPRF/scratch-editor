@@ -153,6 +153,8 @@ class SpriteSelectorItem extends React.PureComponent {
             costumeURL,
             vm,
             deleteConfirmationModalPosition,
+            spriteActionPolicy,
+            deleteAction,
 
             ...props
         } = this.props;
@@ -169,7 +171,9 @@ class SpriteSelectorItem extends React.PureComponent {
                 costumeURL={this.getCostumeData()}
                 preventContextMenu={this.dragRecognizer.gestureInProgress()}
                 onClick={this.handleClick}
-                onDeleteButtonClick={onDeleteButtonClick ? this.handleDeleteButtonClick : null}
+                onDeleteButtonClick={
+                    onDeleteButtonClick && spriteActionPolicy(deleteAction, id) ? this.handleDeleteButtonClick : null
+                }
                 onDuplicateButtonClick={onDuplicateButtonClick ? this.handleDuplicate : null}
                 onExportButtonClick={onExportButtonClick ? this.handleExport : null}
                 onMouseDown={this.handleMouseDown}
@@ -200,9 +204,24 @@ SpriteSelectorItem.propTypes = {
     onExportButtonClick: PropTypes.func,
     receivedBlocks: PropTypes.bool.isRequired,
     selected: PropTypes.bool,
+    /**
+     * Policy action name this item's delete is checked against: 'delete' for sprites,
+     * 'delete-costume' / 'delete-sound' for the Costumes and Sounds tab lists.
+     */
+    deleteAction: PropTypes.oneOf(['delete', 'delete-costume', 'delete-sound']),
+    /**
+     * Decides whether an action is offered for this item, called as (action, id). Returning
+     * false for `deleteAction` hides both the delete button and the delete context-menu item.
+     */
+    spriteActionPolicy: PropTypes.func,
     withDeleteConfirmation: PropTypes.bool,
     deleteConfirmationModalPosition: PropTypes.string,
     vm: PropTypes.instanceOf(VM).isRequired
+};
+
+SpriteSelectorItem.defaultProps = {
+    deleteAction: 'delete',
+    spriteActionPolicy: () => true
 };
 
 const mapStateToProps = (state, {id}) => ({

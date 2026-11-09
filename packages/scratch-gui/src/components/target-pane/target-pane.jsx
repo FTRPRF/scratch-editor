@@ -43,6 +43,7 @@ const TargetPane = ({
     onSpriteUpload,
     onSurpriseSpriteClick,
     raiseSprites,
+    spriteActionPolicy,
     stage,
     stageSize,
     sprites,
@@ -59,6 +60,7 @@ const TargetPane = ({
             hoveredTarget={hoveredTarget}
             raised={raiseSprites}
             selectedId={editingTarget}
+            spriteActionPolicy={spriteActionPolicy}
             spriteFileInput={fileInputRef}
             sprites={sprites}
             stageSize={stageSize}
@@ -157,6 +159,7 @@ TargetPane.propTypes = {
     onSpriteUpload: PropTypes.func,
     onSurpriseSpriteClick: PropTypes.func,
     raiseSprites: PropTypes.bool,
+    spriteActionPolicy: PropTypes.func,
     spriteLibraryVisible: PropTypes.bool,
     sprites: PropTypes.objectOf(spriteShape),
     stage: spriteShape,
