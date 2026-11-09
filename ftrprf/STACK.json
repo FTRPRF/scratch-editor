@@ -1,0 +1,124 @@
+{
+    "upstreamTag": "v15.3.0",
+    "upstreamSha": "ba0da34a331ddf4dc0d2d713b8e0d8ec0486746e",
+    "tree": "d4a075d67550d84fc858c54bb139fcef8352c81b",
+    "commits": [
+        {
+            "subject": "ci(ftrprf): publish @ftrprf/scratch-gui from a clean-room workflow",
+            "patchId": "5aaee8e9b93d0e5ff8bcb4cd855f8959c2448039",
+            "paths": [
+                ".github/actions/deploy-pages-with-retry/action.yml",
+                ".github/actions/install-dependencies/action.yml",
+                ".github/actions/test-package/action.yml",
+                ".github/actions/update-i18n/action.yml",
+                ".github/workflows/ci.yml",
+                ".github/workflows/copilot-review.yml",
+                ".github/workflows/deploy-playground-preview.yml",
+                ".github/workflows/gha-debug.yml",
+                ".github/workflows/ghpages-cleanup.yml",
+                ".github/workflows/publish-ftrprf.yml",
+                ".github/workflows/publish.yml",
+                ".github/workflows/signature-assistant.yml",
+                ".github/workflows/test-packages.yml",
+                ".github/workflows/update-i18n.yml",
+                "AGENTS.md",
+                "package-lock.json",
+                "package.json",
+                "packages/scratch-gui/package.json",
+                "scripts/ftrprf/assert-gui-bundle.mjs",
+                "scripts/ftrprf/assert-gui-bundle.test.mjs"
+            ]
+        },
+        {
+            "subject": "ci(ftrprf): run gui Playwright tests with browsers and xvfb, loosen svgFilters match",
+            "patchId": "2c8ea8522038e0b782082fba3bbc7014df53de1e",
+            "paths": [
+                ".github/workflows/publish-ftrprf.yml",
+                "scripts/ftrprf/assert-gui-bundle.mjs",
+                "scripts/ftrprf/assert-gui-bundle.test.mjs"
+            ]
+        },
+        {
+            "subject": "feat(ftrprf): install hooks for an external blocks plugin",
+            "patchId": "f61a5b3e9e1d4118538ce787821fe261ef2003b5",
+            "paths": [
+                "packages/scratch-gui/src/components/gui/gui.jsx",
+                "packages/scratch-gui/src/containers/blocks.jsx",
+                "packages/scratch-gui/test/unit/containers/blocks-ftrprf-hooks.test.jsx",
+                "packages/scratch-gui/test/unit/containers/blocks.test.js"
+            ]
+        },
+        {
+            "subject": "feat(ftrprf): custom tabs and sprite-action policy",
+            "patchId": "77157646013018df696dca837d77a5bc81fa536d",
+            "paths": [
+                "packages/scratch-gui/src/components/asset-panel/selector.jsx",
+                "packages/scratch-gui/src/components/gui/gui.jsx",
+                "packages/scratch-gui/src/components/sprite-selector/sprite-list.jsx",
+                "packages/scratch-gui/src/components/sprite-selector/sprite-selector.jsx",
+                "packages/scratch-gui/src/components/target-pane/target-pane.jsx",
+                "packages/scratch-gui/src/containers/costume-tab.jsx",
+                "packages/scratch-gui/src/containers/sound-tab.jsx",
+                "packages/scratch-gui/src/containers/sprite-selector-item.jsx",
+                "packages/scratch-gui/test/unit/components/gui-ftrprf-tabs.test.jsx",
+                "packages/scratch-gui/test/unit/components/sprite-selector-item-policy.test.jsx"
+            ]
+        },
+        {
+            "subject": "fix(ftrprf): keep SVG filter primitives when sanitizing costumes",
+            "patchId": "111cb7fec14bb0c53457919949e047d249d50799",
+            "paths": [
+                "packages/scratch-svg-renderer/src/sanitize-svg.js",
+                "packages/scratch-svg-renderer/test/sanitize-svg-filters.js"
+            ]
+        },
+        {
+            "subject": "docs(ftrprf): draft upstream PR text for the SVG filters fix",
+            "patchId": "86fbc63126a06f1adb9e5d3d93439ff6a485c54a",
+            "paths": [
+                "docs/upstream-pr-svg-filters.md"
+            ]
+        },
+        {
+            "subject": "ci(ftrprf): declare and assert the FTRPRF stack",
+            "patchId": "d995dbb3a0d48d49fdc7cb67c1cc44d13d396670",
+            "paths": [
+                ".github/workflows/publish-ftrprf.yml",
+                "scripts/ftrprf/assert-stack.mjs",
+                "scripts/ftrprf/assert-stack.test.mjs"
+            ]
+        },
+        {
+            "subject": "fix(ftrprf): pin whitespace, tree and upstream SHA in the stack check",
+            "patchId": "31e94ee03ec70306dbac149a74455b2400a39f64",
+            "paths": [
+                "scripts/ftrprf/assert-stack.mjs",
+                "scripts/ftrprf/assert-stack.test.mjs"
+            ]
+        },
+        {
+            "subject": "build(ftrprf): ship a full source map with the dist bundle",
+            "patchId": "7e5b65bd91d1a81d3c90498a7c0339504691b487",
+            "paths": [
+                "packages/scratch-gui/webpack.config.js"
+            ]
+        },
+        {
+            "subject": "ci(ftrprf): assert the dist source map has real mappings",
+            "patchId": "ef87af83d4dfeaaf3ea48108867297b082cc30e2",
+            "paths": [
+                ".github/workflows/publish-ftrprf.yml",
+                "scripts/ftrprf/assert-gui-bundle.mjs",
+                "scripts/ftrprf/assert-gui-bundle.test.mjs"
+            ]
+        },
+        {
+            "subject": "fix(ftrprf): keep the 12.x procedure-prototype shape on save",
+            "patchId": "bccc379386cf22d9177ffdac737f5ae0be739687",
+            "paths": [
+                "packages/scratch-vm/src/serialization/sb3.js",
+                "packages/scratch-vm/test/unit/serialization_procedures_ftrprf.js"
+            ]
+        }
+    ]
+}
