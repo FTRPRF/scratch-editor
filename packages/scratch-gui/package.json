@@ -166,7 +166,7 @@
     "react-visibility-sensor": "5.1.1",
     "redux-throttle": "0.1.1",
     "scratch-audio": "2.0.268",
-    "scratch-blocks": "npm:@ftrprf/scratch-blocks@1.3.0-ftrprf.1-rc.2",
+    "scratch-blocks": "npm:@ftrprf/scratch-blocks@1.3.0-ftrprf.1",
     "scratch-l10n": "6.1.60",
     "scratch-paint": "4.1.50",
     "scratch-render-fonts": "1.0.252",
