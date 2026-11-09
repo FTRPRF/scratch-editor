@@ -368,6 +368,143 @@ const getExtensionIdForOpcode = function (opcode) {
 };
 
 /**
+ * Parse a JSON-encoded procedure mutation array (argumentids, argumentnames,
+ * argumentdefaults). Returns null when the value is not a JSON array.
+ * @param {string|undefined} value The mutation attribute.
+ * @returns {?Array} The parsed array, or null.
+ */
+const parseMutationArray = function (value) {
+    if (typeof value !== 'string') return null;
+    try {
+        const parsed = JSON.parse(value);
+        return Array.isArray(parsed) ? parsed : null;
+    } catch (error) {
+        log.warn(`Unparseable procedure mutation array: ${error.message}`);
+        return null;
+    }
+};
+
+/**
+ * FTRPRF: the argument placeholders (%n, %b, %s) of a proccode, in order.
+ * Tokenizes as scratch-blocks' createAllInputs_ and the sb2 parser do: a
+ * backslash-escaped placeholder (\%b) is label text, not an argument.
+ * @param {string|undefined} proccode The procedure's proccode.
+ * @returns {Array.<string>} The placeholders, e.g. ['%s', '%b'].
+ */
+const procedureArgumentSlots = function (proccode) {
+    if (typeof proccode !== 'string') return [];
+    return proccode.split(/(?=[^\\]%[nbs])/)
+        .map(component => component.trim())
+        .filter(component => component.startsWith('%'))
+        .map(component => component.substring(0, 2));
+};
+
+/**
+ * FTRPRF: write procedures in the shape the 12.x chain (scratch-blocks 1.x)
+ * saves, so a project saved here loads the same way in the 12.x chain.
+ *
+ * The load repair in deserializeBlocks makes every procedures_prototype a
+ * non-shadow block and drops its argument_reporter_* shadows, because Blockly
+ * 12 rebuilds them from the mutation. That repair stays as it is: this editor
+ * relies on it. But the 12.x chain reads a save in that shape as it stands:
+ * its prototypes become normal blocks, which can be dragged out of their
+ * definition or deleted, and their argument shadows are gone from the VM.
+ *
+ * So, on SAVE only, every prototype that is not a top-level block is written
+ * as a shadow, as the 12.x chain always holds it (an orphan prototype left
+ * without its definition by an older editor included). The definition's
+ * custom_block input is written as a shadow input ([1, id]). And every
+ * argument the mutation declares that has no reporter gets one back: an
+ * argument_reporter_boolean for a %b slot, otherwise an
+ * argument_reporter_string_number, with the argument name as its VALUE.
+ * Its id is derived from the prototype id and the argument id, so repeated
+ * saves write the same ids. A reporter the VM already holds keeps its id,
+ * but is written as a shadow and its input as a shadow input ([1, id]):
+ * this editor's Make-a-Block puts the reporters in as normal blocks, which
+ * the 12.x chain would let be dragged out of the definition or deleted.
+ * Only the prototype's own inputs are touched; an argument reporter used in
+ * a script stays a normal block.
+ * A top-level prototype is left alone: as a shadow it would lose its place.
+ *
+ * Only the serialized objects are changed, never the runtime blocks. Loading
+ * the result here goes through the same repair as any 12.x save.
+ * @param {object} blocks The runtime blocks being serialized (read only).
+ * @param {object} obj The serialized blocks, before input compression.
+ */
+const keepLegacyProcedureShape = function (blocks, obj) {
+    // Runs on every save; a throw would lose the student's work, so impossible states are skipped, not trusted.
+    for (const protoId in blocks) {
+        if (!Object.prototype.hasOwnProperty.call(blocks, protoId)) continue;
+        const proto = blocks[protoId];
+        if (!proto || proto.opcode !== 'procedures_prototype') continue;
+        const serializedProto = obj[protoId];
+        if (!serializedProto || Array.isArray(serializedProto) ||
+            serializedProto.topLevel) {
+            continue;
+        }
+        serializedProto.shadow = true;
+
+        const definition = obj[proto.parent];
+        if (definition && !Array.isArray(definition) &&
+            definition.opcode === 'procedures_definition' &&
+            definition.inputs.custom_block &&
+            definition.inputs.custom_block[1] === protoId) {
+            definition.inputs.custom_block = [INPUT_SAME_BLOCK_SHADOW, protoId];
+        }
+
+        const mutation = proto.mutation || {};
+        const argumentIds = parseMutationArray(mutation.argumentids);
+        const argumentNames = parseMutationArray(mutation.argumentnames);
+        if (!argumentIds || !argumentNames) continue;
+        const slots = procedureArgumentSlots(mutation.proccode);
+
+        argumentIds.forEach((argumentId, i) => {
+            if (typeof argumentId !== 'string') return;
+            const existing = serializedProto.inputs[argumentId];
+            const existingBlock = existing && blocks[existing[1]];
+            if (existingBlock && existingBlock.parent === protoId &&
+                (existingBlock.opcode === 'argument_reporter_string_number' ||
+                 existingBlock.opcode === 'argument_reporter_boolean')) {
+                // 15's Make-a-Block puts these in as normal blocks; the 12.x
+                // chain only holds them as shadows of the prototype.
+                const serializedReporter = obj[existing[1]];
+                if (serializedReporter && !Array.isArray(serializedReporter)) {
+                    serializedReporter.shadow = true;
+                    serializedReporter.topLevel = false;
+                }
+                // An obscured shadow under it has no place in the 12.x shape.
+                const obscured = existing[2];
+                if (typeof obscured === 'string' && obscured !== existing[1] &&
+                    obj[obscured] && !Array.isArray(obj[obscured]) &&
+                    obj[obscured].parent === protoId) {
+                    delete obj[obscured];
+                }
+                serializedProto.inputs[argumentId] = [INPUT_SAME_BLOCK_SHADOW, existing[1]];
+                return;
+            }
+            let reporterId = `${protoId}_${argumentId}`;
+            while (Object.prototype.hasOwnProperty.call(blocks, reporterId) ||
+                   reporterId in obj) {
+                reporterId = `${reporterId}_`;
+            }
+            const name = argumentNames[i];
+            obj[reporterId] = {
+                opcode: slots[i] === '%b' ?
+                    'argument_reporter_boolean' :
+                    'argument_reporter_string_number',
+                next: null,
+                parent: protoId,
+                inputs: Object.create(null),
+                fields: {VALUE: [name === null || typeof name === 'undefined' ? '' : String(name), null]},
+                shadow: true,
+                topLevel: false
+            };
+            serializedProto.inputs[argumentId] = [INPUT_SAME_BLOCK_SHADOW, reporterId];
+        });
+    }
+};
+
+/**
  * Serialize the given blocks object (representing all the blocks for the target
  * currently being serialized.)
  * @param {object} blocks The blocks to be serialized
@@ -386,6 +523,8 @@ const serializeBlocks = function (blocks) {
             extensionIDs.add(extensionID);
         }
     }
+    // FTRPRF: write procedures in the 12.x shape (see keepLegacyProcedureShape).
+    keepLegacyProcedureShape(blocks, obj);
     // once we have completed a first pass, do a second pass on block inputs
     for (const blockID in obj) {
         // don't need to do the hasOwnProperty check here since we
