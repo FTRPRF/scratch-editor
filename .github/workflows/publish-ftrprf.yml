@@ -53,9 +53,11 @@ jobs:
             echo "npm_tag=latest" >> "$GITHUB_OUTPUT"
           fi
 
+      # Full history: the stack check walks <upstream tag>..HEAD.
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
         with:
           persist-credentials: false
+          fetch-depth: 0
 
       # node-version-file reads this ref's .nvmrc. No `cache:` on purpose: a
       # publish job should not restore anything another run could have written.
@@ -74,6 +76,20 @@ jobs:
 
       - name: Test the FTRPRF scripts
         run: node --test scripts/ftrprf/*.test.mjs
+
+      # Fails the job unless this ref is exactly the upstream tag plus the stack
+      # ftrprf/STACK.json declares. The fork carries no upstream tags, so the tag
+      # is fetched from upstream; the script checks it resolves to the pinned SHA.
+      # Runs this ref's own copy of the script: the default branch (the 12.x line)
+      # has none to trust instead, so a human still reviews STACK.json in the PR.
+      - name: Assert the FTRPRF stack
+        run: |
+          tag="$(node -p 'require("./ftrprf/STACK.json").upstreamTag')"
+          if ! [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::unexpected upstreamTag in ftrprf/STACK.json: $tag"; exit 1
+          fi
+          git fetch --no-tags https://github.com/scratchfoundation/scratch-editor.git "refs/tags/$tag:refs/tags/$tag"
+          node scripts/ftrprf/assert-stack.mjs
 
       # scratch-gui consumes the other workspaces' built output, so they go
       # first; the integration tests also need scratch-gui's own build/.
