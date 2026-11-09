@@ -140,6 +140,7 @@ jobs:
         env:
           CI: 'true'
 
+      # Also checks dist/scratch-gui.js.map has real mappings (not just a big file).
       - name: Assert the built bundle is the FTRPRF one
         run: node scripts/ftrprf/assert-gui-bundle.mjs packages/scratch-gui/dist/scratch-gui.js
 
@@ -165,7 +166,8 @@ jobs:
               console.error("Not in the tarball: " + missing.join(", "));
               process.exit(1);
             }
-            // A full source map is tens of MB; a line-only map is under 1 KB.
+            // Size is only a cheap tripwire (sourcesContent makes even a stub map large);
+            // the mappings themselves are checked by assert-gui-bundle.mjs above.
             const map = pack.files.find(f => f.path === "dist/scratch-gui.js.map");
             if (map.size < 10 * 1024 * 1024) {
               console.error("dist/scratch-gui.js.map is only " + map.size + " bytes; expected a full source map");
