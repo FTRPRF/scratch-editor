@@ -111,11 +111,16 @@ jobs:
         env:
           NODE_ENV: production
 
+      # `npm test` runs the Playwright projects (chromium + firefox) as well.
+      - name: Install Playwright browsers
+        working-directory: packages/scratch-gui
+        run: npx playwright install --with-deps chromium firefox
+
+      # Firefox runs headed (headless Firefox has no WebGL), so it needs the
+      # virtual display xvfb-run provides.
       - name: Test scratch-gui
-        run: |
-          # The runner image ships ChromeDriver outside PATH.
-          export PATH="$CHROMEWEBDRIVER:$PATH"
-          npm test --workspace packages/scratch-gui
+        working-directory: packages/scratch-gui
+        run: xvfb-run --auto-servernum npm test
         env:
           CI: 'true'
 

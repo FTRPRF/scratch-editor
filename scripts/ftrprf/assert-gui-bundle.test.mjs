@@ -36,6 +36,20 @@ test('accepts the unminified svgFilters form', () => {
     assert.equal(run(parts).status, 0);
 });
 
+test('accepts svgFilters in reversed order and alongside other keys', () => {
+    for (const svgFilters of [
+        'x({USE_PROFILES:{svgFilters:!0,svg:!0}});',
+        'x({USE_PROFILES:{svg:!0,html:!0,svgFilters:!0,mathMl:!0}});'
+    ]) {
+        assert.equal(run({...PARTS, svgFilters}).status, 0, svgFilters);
+    }
+});
+
+test('rejects svgFilters that is not enabled', () => {
+    const result = run({...PARTS, svgFilters: 'x({USE_PROFILES:{svg:!0,svgFilters:!1}});'});
+    assert.equal(result.status, 1);
+});
+
 for (const marker of Object.keys(PARTS)) {
     test(`fails naming ${marker} when it is missing`, () => {
         const {[marker]: _omitted, ...rest} = PARTS;

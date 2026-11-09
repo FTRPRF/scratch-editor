@@ -11,9 +11,10 @@ import fs from 'node:fs';
 import {fileURLToPath} from 'node:url';
 
 // The SVG sanitizer must run with DOMPurify's svgFilters profile, or every
-// <fe*> primitive is stripped from costumes on load. Matches both minified
-// (`svgFilters:!0`) and unminified (`svgFilters: true`) output.
-const SVG_FILTERS = /USE_PROFILES:\s*\{\s*svg:\s*(?:!0|true),\s*svgFilters:\s*(?:!0|true)\s*\}/;
+// <fe*> primitive is stripped from costumes on load. Matches a USE_PROFILES
+// object that sets svgFilters truthy, in any key order and with any other keys,
+// in both minified (`svgFilters:!0`) and unminified (`svgFilters: true`) output.
+const SVG_FILTERS = /USE_PROFILES:\s*\{[^{}]*\bsvgFilters:\s*(?:!0|true)\b/;
 
 export const MARKERS = [
     {name: 'svgFilters', test: bundle => SVG_FILTERS.test(bundle)},
