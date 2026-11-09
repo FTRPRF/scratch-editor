@@ -40,6 +40,11 @@ assembled by migrating previously separate repositories into a single repo.
 All packages are published to npm under the `@scratch/` scope. They are consumed both internally (e.g.,
 `scratch-www` loads `scratch-gui`) and by third parties.
 
+**FTRPRF fork exception.** In this fork only `packages/scratch-gui` is published, as `@ftrprf/scratch-gui` to
+GitHub Packages, and only by `.github/workflows/publish-ftrprf.yml`. No other package is published from the fork.
+The FTRPRF commits on top of the upstream tag are declared in `ftrprf/STACK.json` and checked by
+`scripts/ftrprf/assert-stack.mjs`.
+
 ## Build and lint
 
 Run workspace-wide commands from the repo root:
@@ -137,7 +142,8 @@ Keep each section of a package's `package.json` (`dependencies`, `devDependencie
 order. The same applies to the root `package.json`.
 
 **Do not publish packages manually.** Every package has a `prepublishOnly` script that will error if you try.
-Publishing is handled exclusively by the CI release pipeline.
+Publishing is handled exclusively by the CI release pipeline (in this fork: `publish-ftrprf.yml`, for
+`@ftrprf/scratch-gui` only).
 
 ## Before submitting changes
 

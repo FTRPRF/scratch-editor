@@ -1,0 +1,200 @@
+name: Publish @ftrprf/scratch-gui
+
+# Manual only. Builds the ref you run it on and publishes @ftrprf/scratch-gui
+# to GitHub Packages. Nothing is published from a laptop.
+# Written from scratch for the clean-room FTRPRF branch; it deliberately shares
+# nothing with the upstream publish/release workflows (which are removed).
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to publish, e.g. 15.3.0-ftrprf.1-rc.1 (a non -rc version is only allowed from the default branch)'
+        required: true
+        type: string
+
+# Nothing by default; each job asks for what it needs. Only the final publish
+# job holds `packages: write`, and it runs no dependency code: it downloads the
+# packed tarball and publishes it with --ignore-scripts.
+permissions: {}
+
+concurrency:
+  group: publish-ftrprf
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04  # ubuntu-latest is 26.04, which Playwright does not support yet
+    permissions:
+      contents: read
+    outputs:
+      npm_tag: ${{ steps.validate.outputs.npm_tag }}
+    env:
+      # Never interpolate these into a `run:` script; read them as env vars.
+      INPUT_VERSION: ${{ inputs.version }}
+      SOURCE_SHA: ${{ github.sha }}
+      REF_NAME: ${{ github.ref_name }}
+      DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+      IS_DEFAULT_REF: ${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
+    steps:
+      - name: Validate the version and ref
+        id: validate
+        run: |
+          if ! [[ "$INPUT_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+-ftrprf\.[0-9]+(-rc\.[0-9]+)?$ ]]; then
+            echo "::error::version must look like 15.3.0-ftrprf.1 or 15.3.0-ftrprf.1-rc.1"
+            exit 1
+          fi
+          if [[ "$INPUT_VERSION" != *-rc.* && "$IS_DEFAULT_REF" != "true" ]]; then
+            echo "::error::a non -rc version can only be published from the default branch ($DEFAULT_BRANCH), not $REF_NAME"
+            exit 1
+          fi
+          if [[ "$INPUT_VERSION" == *-rc.* ]]; then
+            echo "npm_tag=rc" >> "$GITHUB_OUTPUT"
+          else
+            echo "npm_tag=latest" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
+        with:
+          persist-credentials: false
+
+      # node-version-file reads this ref's .nvmrc. No `cache:` on purpose: a
+      # publish job should not restore anything another run could have written.
+      - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6
+        with:
+          node-version-file: '.nvmrc'
+
+      # scratch-paint -> paper.js -> canvas needs these to build.
+      - name: Install system libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev
+
+      - name: Install dependencies
+        run: NODE_ENV=development npm ci
+
+      - name: Test the FTRPRF scripts
+        run: node --test scripts/ftrprf/*.test.mjs
+
+      # scratch-gui consumes the other workspaces' built output, so they go
+      # first; the integration tests also need scratch-gui's own build/.
+      - name: Build workspace dependencies
+        run: |
+          # Same order as the root `workspaces` list.
+          npm run build --workspace packages/task-herder
+          npm run build --workspace packages/scratch-storage
+          npm run build --workspace packages/scratch-svg-renderer
+          npm run build --workspace packages/scratch-paint
+          npm run build --workspace packages/scratch-render
+          npm run build --workspace packages/scratch-vm
+        env:
+          NODE_ENV: production
+
+      # The FTRPRF stack also changes these two workspaces, which the gui bundles,
+      # so their suites gate the publish too (upstream's removed CI ran them the
+      # same way). `npm test` is lint + tap: for scratch-vm the unit and
+      # integration suites (incl. serialization_procedures_ftrprf.js), for
+      # scratch-svg-renderer test/*.js (incl. sanitize-svg-filters.js). The
+      # svg-renderer's separate Playwright suite (test:playwright) is not run:
+      # upstream's CI did not run it either. Its visual-fidelity snapshots are
+      # rendered on Linux and differ by a few pixels on macOS, so this passes
+      # here but not on a Mac.
+      - name: Test scratch-vm
+        working-directory: packages/scratch-vm
+        run: npm test
+
+      - name: Test scratch-svg-renderer
+        working-directory: packages/scratch-svg-renderer
+        run: npm test
+
+      - name: Build scratch-gui
+        run: npm run build --workspace packages/scratch-gui
+        env:
+          NODE_ENV: production
+
+      - name: Test scratch-gui
+        run: |
+          # The runner image ships ChromeDriver outside PATH.
+          export PATH="$CHROMEWEBDRIVER:$PATH"
+          npm test --workspace packages/scratch-gui
+        env:
+          CI: 'true'
+
+      - name: Assert the built bundle is the FTRPRF one
+        run: node scripts/ftrprf/assert-gui-bundle.mjs packages/scratch-gui/dist/scratch-gui.js
+
+      # GitHub Packages only accepts a package under the owner's scope; the
+      # name is already @ftrprf/scratch-gui in package.json. The version comes
+      # from the dispatch input and the source commit is stamped in here.
+      - name: Set the version and source commit
+        run: |
+          npm pkg set version="$INPUT_VERSION" --workspace packages/scratch-gui
+          npm pkg set ftrprfSourceSha="$SOURCE_SHA" --workspace packages/scratch-gui
+
+      - name: Check the tarball contents
+        run: |
+          npm pack --dry-run --json --ignore-scripts --workspace packages/scratch-gui > pack.json
+          node -e '
+            // `prepare` still runs under --ignore-scripts and can print before the JSON.
+            const raw = require("fs").readFileSync("pack.json", "utf8");
+            const pack = JSON.parse(raw.slice(raw.search(/^\[$/m)))[0];
+            const listed = new Set(pack.files.map(f => f.path));
+            const need = ["package.json", "dist/scratch-gui.js", "dist/scratch-gui.js.map", "dist/extension-worker.js", "dist/types/index.d.ts"];
+            const missing = need.filter(f => !listed.has(f));
+            if (missing.length) {
+              console.error("Not in the tarball: " + missing.join(", "));
+              process.exit(1);
+            }
+            // A full source map is tens of MB; a line-only map is under 1 KB.
+            const map = pack.files.find(f => f.path === "dist/scratch-gui.js.map");
+            if (map.size < 10 * 1024 * 1024) {
+              console.error("dist/scratch-gui.js.map is only " + map.size + " bytes; expected a full source map");
+              process.exit(1);
+            }
+            console.log(pack.name + "@" + pack.version + ": " + listed.size + " files, all required present");
+          '
+          rm pack.json
+
+      # Scripts are skipped: everything was built and tested above.
+      - name: Pack
+        run: |
+          mkdir pack
+          npm pack --ignore-scripts --workspace packages/scratch-gui --pack-destination pack
+
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        with:
+          name: scratch-gui-tarball
+          path: pack/*.tgz
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      packages: write
+    env:
+      INPUT_VERSION: ${{ inputs.version }}
+      NPM_TAG: ${{ needs.build.outputs.npm_tag }}
+    steps:
+      - uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
+        with:
+          name: scratch-gui-tarball
+          path: pack
+
+      # Only for the registry auth (.npmrc); no checkout and no install here.
+      - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6
+        with:
+          node-version: 24
+          registry-url: https://npm.pkg.github.com
+          scope: '@ftrprf'
+
+      - name: Publish the packed tarball
+        run: |
+          # ./ prefix: a bare "pack/x.tgz" is read as a GitHub owner/repo shorthand.
+          tgz="./pack/ftrprf-scratch-gui-${INPUT_VERSION}.tgz"
+          if [ "$(ls pack | wc -l)" != "1" ] || [ ! -f "$tgz" ]; then
+            echo "::error::expected exactly $tgz in the build artifact"; ls -l pack; exit 1
+          fi
+          npm publish "$tgz" --ignore-scripts --tag "$NPM_TAG"
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

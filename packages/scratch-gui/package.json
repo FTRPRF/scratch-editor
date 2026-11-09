@@ -1,6 +1,6 @@
 {
-  "name": "@scratch/scratch-gui",
-  "version": "15.3.0",
+  "name": "@ftrprf/scratch-gui",
+  "version": "15.3.0-ftrprf.1-rc.1",
   "description": "Graphical User Interface for creating and running Scratch 3.0 projects",
   "keywords": [],
   "homepage": "https://github.com/scratchfoundation/scratch-gui#readme",
@@ -243,5 +243,8 @@
     "react-dom": "^18.0.0",
     "react-redux": "^8.0.0",
     "redux": "^4.0.0"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
   }
 }
