@@ -33,8 +33,12 @@ const makeRepo = () => {
     git(cwd, 'config', 'commit.gpgsign', 'false');
     git(cwd, 'config', 'tag.gpgsign', 'false');
     commitFile(cwd, 'base.txt', 'one\ntwo\nthree\n', 'upstream');
+    fs.writeFileSync(path.join(cwd, 'rep.txt'), `${'x\n'.repeat(10)}`);
+    git(cwd, 'add', '-A');
+    git(cwd, 'commit', '-q', '--amend', '--no-edit');
     git(cwd, 'tag', 'v1.0.0');
     git(cwd, 'checkout', '-q', '-b', 'ftrprf/v1.0.0');
+    fs.writeFileSync(path.join(cwd, 'rep.txt'), `${'x\n'.repeat(5)}y\n${'x\n'.repeat(5)}`);
     commitFile(cwd, 'a.txt', 'alpha\n', 'feat(ftrprf): a');
     commitFile(cwd, 'src/b.txt', 'beta\n', 'fix(ftrprf): b');
     const w = assertStack(cwd, '--write', '--tag', 'v1.0.0');
@@ -68,7 +72,7 @@ const restamp = (cwd, mutate) => {
     git(cwd, 'commit', '-q', '--amend', '--no-edit');
 };
 
-const makeTarball = (cwd, pkg) => {
+const makeTarball = pkg => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'assert-stack-tgz-'));
     fs.mkdirSync(path.join(dir, 'package'));
     fs.writeFileSync(path.join(dir, 'package/package.json'), JSON.stringify(pkg));
@@ -140,7 +144,7 @@ test('fails on reordered declared commits', () => withRepo(cwd => {
     restamp(cwd, s => {
         s.commits.reverse();
     });
-    rejects(assertStack(cwd), /differs/);
+    rejects(assertStack(cwd), /subject differs/);
 }));
 
 test('fails on a wrong base', () => withRepo(cwd => {
@@ -150,6 +154,7 @@ test('fails on a wrong base', () => withRepo(cwd => {
     git(cwd, 'checkout', '-q', 'ftrprf/v1.0.0');
     restamp(cwd, s => {
         s.upstreamTag = 'v1.0.1';
+        s.upstreamSha = git(cwd, 'rev-parse', 'v1.0.1');
     });
     rejects(assertStack(cwd), /merge-base of HEAD and v1\.0\.1/);
 }));
@@ -181,24 +186,24 @@ test('fails when the STACK.json-only tip lacks the chore(ftrprf) prefix', () => 
 
 test('a chore(ftrprf) commit touching other paths gets no exemption', () => withRepo(cwd => {
     commitFile(cwd, 'x.txt', 'x\n', 'chore(ftrprf): update STACK.json');
-    rejects(assertStack(cwd), /stack commit\(s\)|may appear once/);
+    rejects(assertStack(cwd), /may appear once, as the tip/);
 }));
 
 test('--tarball passes when ftrprfSourceSha equals HEAD', () => withRepo(cwd => {
     const head = git(cwd, 'rev-parse', 'HEAD');
-    const r = assertStack(cwd, '--tarball', makeTarball(cwd, {name: 'x', ftrprfSourceSha: head}));
+    const r = assertStack(cwd, '--tarball', makeTarball({name: 'x', ftrprfSourceSha: head}));
     assert.equal(r.status, 0, r.stderr);
 }));
 
 test('--tarball fails on an SHA mismatch', () => withRepo(cwd => {
     const sha = git(cwd, 'rev-parse', 'HEAD~1');
-    rejects(assertStack(cwd, '--tarball', makeTarball(cwd, {ftrprfSourceSha: sha})), /does not equal HEAD/);
+    rejects(assertStack(cwd, '--tarball', makeTarball({ftrprfSourceSha: sha})), /does not equal HEAD/);
 }));
 
 test('--tarball fails when ftrprfSourceSha is missing or abbreviated', () => withRepo(cwd => {
-    rejects(assertStack(cwd, '--tarball', makeTarball(cwd, {name: 'x'})), /missing or not a full SHA/);
+    rejects(assertStack(cwd, '--tarball', makeTarball({name: 'x'})), /missing or not a full SHA/);
     const short = git(cwd, 'rev-parse', '--short', 'HEAD');
-    rejects(assertStack(cwd, '--tarball', makeTarball(cwd, {ftrprfSourceSha: short})), /missing or not a full SHA/);
+    rejects(assertStack(cwd, '--tarball', makeTarball({ftrprfSourceSha: short})), /missing or not a full SHA/);
 }));
 
 test('--tarball fails on an unreadable tarball', () => withRepo(cwd => {
@@ -219,4 +224,72 @@ test('--previous rejects option-looking and unknown refs', () => withRepo(cwd =>
 
 test('rejects unknown arguments', () => withRepo(cwd => {
     rejects(assertStack(cwd, '--bogus'), /unknown argument/);
+}));
+
+test('fails on a whitespace-only change to a declared commit', () => withRepo(cwd => {
+    const oldB = git(cwd, 'rev-parse', 'HEAD~1');
+    git(cwd, 'checkout', '-q', oldB);
+    fs.writeFileSync(path.join(cwd, 'src/b.txt'), 'beta \n');
+    git(cwd, 'add', '-A');
+    git(cwd, 'commit', '-q', '--amend', '--no-edit');
+    const tampered = git(cwd, 'rev-parse', 'HEAD');
+    git(cwd, 'checkout', '-q', 'ftrprf/v1.0.0');
+    git(cwd, 'rebase', '-q', '--onto', tampered, oldB, 'ftrprf/v1.0.0');
+    rejects(assertStack(cwd), /commit 2 .*patch-id .* differs from declared/);
+}));
+
+test('fails when the same patch lands at a different position', () => withRepo(cwd => {
+    const patchIdOf = sha => spawnSync('git', ['patch-id', '--verbatim'], {
+        cwd, encoding: 'utf8', input: git(cwd, 'diff-tree', '--root', '-p', sha)
+    }).stdout.split(' ')[0];
+    const oldA = git(cwd, 'rev-parse', 'HEAD~2');
+    git(cwd, 'checkout', '-q', oldA);
+    fs.writeFileSync(path.join(cwd, 'rep.txt'), `${'x\n'.repeat(6)}y\n${'x\n'.repeat(4)}`);
+    git(cwd, 'add', '-A');
+    git(cwd, 'commit', '-q', '--amend', '--no-edit');
+    const moved = git(cwd, 'rev-parse', 'HEAD');
+    // Precondition: the verbatim patch-id cannot tell the two apart.
+    assert.equal(patchIdOf(moved), patchIdOf(oldA));
+    git(cwd, 'checkout', '-q', 'ftrprf/v1.0.0');
+    git(cwd, 'rebase', '-q', '--onto', moved, oldA, 'ftrprf/v1.0.0');
+    rejects(assertStack(cwd), /tree of the last stack commit is/);
+}));
+
+test('fails when a local tag points somewhere else', () => withRepo(cwd => {
+    git(cwd, 'tag', '-f', 'v1.0.0', 'HEAD~1');
+    rejects(assertStack(cwd), /resolves to .*, STACK\.json pins/);
+}));
+
+test('fails when STACK.json lacks upstreamSha or tree', () => withRepo(cwd => {
+    restamp(cwd, s => {
+        delete s.upstreamSha;
+    });
+    rejects(assertStack(cwd), /upstreamSha is missing/);
+    restamp(cwd, s => {
+        s.upstreamSha = git(cwd, 'rev-parse', 'v1.0.0');
+        delete s.tree;
+    });
+    rejects(assertStack(cwd), /tree is missing/);
+}));
+
+test('--write cannot be combined with --tarball or --previous', () => withRepo(cwd => {
+    rejects(assertStack(cwd, '--write', '--tarball', 'x.tgz'), /cannot be combined/);
+    rejects(assertStack(cwd, '--write', '--previous', 'main'), /cannot be combined/);
+}));
+
+test('--write refuses a range with a merge commit', () => withRepo(cwd => {
+    git(cwd, 'checkout', '-q', '-b', 'side', 'v1.0.0');
+    commitFile(cwd, 'side.txt', 's\n', 'side');
+    git(cwd, 'checkout', '-q', 'ftrprf/v1.0.0');
+    git(cwd, 'merge', '-q', '--no-ff', '-m', 'merge side', 'side');
+    rejects(assertStack(cwd, '--write', '--tag', 'v1.0.0'), /merge commits in v1\.0\.0\.\.HEAD/);
+}));
+
+test('a renamed path is declared as both its old and new path', () => withRepo(cwd => {
+    git(cwd, 'reset', '-q', '--hard', 'HEAD~1');
+    git(cwd, 'mv', 'a.txt', 'c.txt');
+    git(cwd, 'commit', '-q', '-m', 'refactor(ftrprf): rename a');
+    assert.equal(assertStack(cwd, '--write', '--tag', 'v1.0.0').status, 0);
+    const stack = JSON.parse(fs.readFileSync(path.join(cwd, 'ftrprf/STACK.json'), 'utf8'));
+    assert.deepEqual(stack.commits.at(-1).paths, ['a.txt', 'c.txt']);
 }));

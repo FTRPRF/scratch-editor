@@ -8,13 +8,18 @@
 // The check exits 0 only when ALL of these hold (it fails closed on anything
 // it cannot read or parse):
 //   - ftrprf/STACK.json, read from the HEAD commit (not the working tree), is
-//     well formed and names an upstream tag that exists;
+//     well formed, and its upstreamTag resolves to exactly its upstreamSha;
 //   - the merge-base of HEAD and that tag is the tag commit;
 //   - there are no merge commits in tag..HEAD;
 //   - the commits in tag..HEAD, minus at most one trailing "chore(ftrprf)"
 //     commit that touches only ftrprf/STACK.json, match STACK.json one to one,
-//     in order, by subject, `git patch-id --stable` and touched paths;
+//     in order, by subject, `git patch-id --verbatim` (whitespace-sensitive)
+//     and touched paths;
+//   - the tree of the last declared stack commit equals STACK.json's `tree`,
+//     which pins where every hunk landed (a patch-id ignores line numbers);
 //   - with --tarball, the packed package.json's ftrprfSourceSha equals HEAD.
+//     This checks only the stamped SHA, NOT that the tarball's contents were
+//     built from that commit.
 // With --previous it also prints `git range-diff <tag> <previous> HEAD`.
 //
 // A commit cannot contain its own patch-id, so STACK.json is committed after
@@ -24,11 +29,19 @@
 // is an error.
 //
 // --write regenerates ftrprf/STACK.json in the working tree from tag..HEAD
-// (ignoring a trailing STACK.json-only commit). Commit the result as
+// (ignoring a trailing STACK.json-only commit). It cannot be combined with
+// --tarball or --previous. Commit the result as
 // "chore(ftrprf): update STACK.json".
 //
-// Known limit: patch-id --stable ignores whitespace, so a whitespace-only
-// edit to a declared commit is not detected by this check.
+// Trust root: STACK.json and this script are read from the branch under test.
+// The control only holds if CI runs a trusted copy of this script (taken from
+// the reviewed default branch, not from the branch being checked) AND a human
+// reviews the STACK.json diff in the fork PR. A branch that rewrites both the
+// script and STACK.json can declare anything.
+//
+// Git is run with pinned diff behaviour (no user/system config, no replace
+// refs, fixed algorithm and context) so a patch-id and a tree are reproducible
+// on any machine.
 import {spawnSync} from 'node:child_process';
 import fs from 'node:fs';
 
@@ -36,6 +49,13 @@ const STACK_FILE = 'ftrprf/STACK.json';
 const TAG_RE = /^v\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
 const SHA_RE = /^[0-9a-f]{40}$/;
 const PATCH_ID_RE = /^[0-9a-f]{40}$/;
+const GIT_ENV = {
+    ...process.env,
+    GIT_NO_REPLACE_OBJECTS: '1',
+    GIT_CONFIG_NOSYSTEM: '1',
+    GIT_CONFIG_GLOBAL: '/dev/null'
+};
+const GIT_PINS = ['-c', 'diff.algorithm=myers', '-c', 'diff.context=3', '-c', 'diff.interHunkContext=0'];
 const CHORE_PREFIX = 'chore(ftrprf)';
 
 class CheckError extends Error {}
@@ -45,7 +65,9 @@ const fail = message => {
 };
 
 const git = (args, input) => {
-    const r = spawnSync('git', args, {encoding: 'utf8', input, maxBuffer: 256 * 1024 * 1024});
+    const r = spawnSync('git', [...GIT_PINS, ...args], {
+        encoding: 'utf8', input, env: GIT_ENV, maxBuffer: 256 * 1024 * 1024
+    });
     if (r.error || r.status !== 0) {
         fail(`git ${args.join(' ')} failed: ${r.error ? r.error.message : r.stderr.trim()}`);
     }
@@ -67,8 +89,9 @@ const touchedPaths = sha =>
         .sort();
 
 const patchId = sha => {
-    const diff = git(['diff-tree', '--root', '--no-renames', '-p', sha]);
-    const out = git(['patch-id', '--stable'], diff).trim();
+    const diff = git(['diff-tree', '--root', '--no-renames', '--no-ext-diff', '--no-textconv', '--binary',
+        '--full-index', '-p', sha]);
+    const out = git(['patch-id', '--verbatim'], diff).trim();
     const [id, ...rest] = out.split(/\s+/);
     if (!PATCH_ID_RE.test(id || '') || rest.length !== 1 || rest[0] !== sha) {
         fail(`could not compute a patch-id for ${sha}`);
@@ -87,6 +110,12 @@ const validateStack = stack => {
     if (!stack || typeof stack !== 'object' || Array.isArray(stack)) fail('STACK.json is not an object');
     if (typeof stack.upstreamTag !== 'string' || !TAG_RE.test(stack.upstreamTag)) {
         fail(`STACK.json upstreamTag is invalid: ${JSON.stringify(stack.upstreamTag)}`);
+    }
+    if (typeof stack.upstreamSha !== 'string' || !SHA_RE.test(stack.upstreamSha)) {
+        fail('STACK.json upstreamSha is missing or not a full SHA');
+    }
+    if (typeof stack.tree !== 'string' || !SHA_RE.test(stack.tree)) {
+        fail('STACK.json tree is missing or not a full SHA');
     }
     if (!Array.isArray(stack.commits)) fail('STACK.json commits is not an array');
     stack.commits.forEach((c, i) => {
@@ -115,7 +144,9 @@ const readDeclaredStack = () => {
 };
 
 const resolveTag = tag => {
-    const r = spawnSync('git', ['rev-parse', '--verify', '--quiet', `refs/tags/${tag}^{commit}`], {encoding: 'utf8'});
+    const r = spawnSync('git', ['rev-parse', '--verify', '--quiet', `refs/tags/${tag}^{commit}`], {
+        encoding: 'utf8', env: GIT_ENV
+    });
     const sha = r.stdout.trim();
     if (r.status !== 0 || !SHA_RE.test(sha)) fail(`upstream tag ${tag} does not exist`);
     return sha;
@@ -127,11 +158,14 @@ const resolveTag = tag => {
  * @param {string} tag - the upstream tag name
  * @returns {{tagSha: string, head: string, stack: object[], stackCommit: (object|null)}} the range
  */
-const readRange = tag => {
+const readRange = (tag, pinnedSha) => {
     const tagSha = resolveTag(tag);
+    if (pinnedSha !== undefined && tagSha !== pinnedSha) {
+        fail(`upstream tag ${tag} resolves to ${tagSha}, STACK.json pins ${pinnedSha}`);
+    }
     const head = git(['rev-parse', '--verify', 'HEAD^{commit}']).trim();
 
-    const mbRes = spawnSync('git', ['merge-base', tagSha, head], {encoding: 'utf8'});
+    const mbRes = spawnSync('git', ['merge-base', tagSha, head], {encoding: 'utf8', env: GIT_ENV});
     if (mbRes.status !== 0 || mbRes.stdout.trim() !== tagSha) {
         fail(`merge-base of HEAD and ${tag} is ${mbRes.stdout.trim() || '(none)'}, not the tag commit ${tagSha}`);
     }
@@ -166,7 +200,7 @@ const sameList = (a, b) => a.length === b.length && a.every((v, i) => v === b[i]
 
 const check = ({previous, tarball}) => {
     const declared = readDeclaredStack();
-    const {tagSha, head, stack} = readRange(declared.upstreamTag);
+    const {tagSha, head, stack} = readRange(declared.upstreamTag, declared.upstreamSha);
 
     if (stack.length !== declared.commits.length) {
         fail(`${declared.upstreamTag}..HEAD has ${stack.length} stack commit(s), STACK.json declares ${declared.commits.length}`);
@@ -181,6 +215,10 @@ const check = ({previous, tarball}) => {
         const id = patchId(c.sha);
         if (id !== want.patchId) fail(`${where}: patch-id ${id} differs from declared ${want.patchId}`);
     });
+
+    const tip = stack.length ? stack[stack.length - 1].sha : tagSha;
+    const tree = git(['rev-parse', '--verify', `${tip}^{tree}`]).trim();
+    if (tree !== declared.tree) fail(`tree of the last stack commit is ${tree}, STACK.json declares ${declared.tree}`);
 
     if (tarball !== undefined) {
         const r = spawnSync('tar', ['-xzOf', tarball, 'package/package.json'], {encoding: 'utf8'});
@@ -212,9 +250,12 @@ const write = ({tag}) => {
         }
     }
     if (typeof upstreamTag !== 'string' || !TAG_RE.test(upstreamTag)) fail(`invalid upstream tag ${upstreamTag}`);
-    const {stack} = readRange(upstreamTag);
+    const {tagSha, stack} = readRange(upstreamTag);
+    const tip = stack.length ? stack[stack.length - 1].sha : tagSha;
     const out = {
         upstreamTag,
+        upstreamSha: tagSha,
+        tree: git(['rev-parse', '--verify', `${tip}^{tree}`]).trim(),
         commits: stack.map(c => ({subject: c.subject, patchId: patchId(c.sha), paths: c.paths}))
     };
     fs.mkdirSync('ftrprf', {recursive: true});
@@ -239,6 +280,9 @@ const parseArgs = argv => {
 const main = () => {
     try {
         const opts = parseArgs(process.argv.slice(2));
+        if (opts.write && (opts.tarball !== undefined || opts.previous !== undefined)) {
+            fail('--write cannot be combined with --tarball or --previous');
+        }
         if (opts.write) write(opts);
         else check(opts);
         return 0;
