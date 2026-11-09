@@ -190,6 +190,10 @@ const GUIComponent = props => {
         onTelemetryModalOptIn,
         onTelemetryModalOptOut,
         onUpdateProjectThumbnail,
+        onBeforeBlocksInject,
+        onBlocksReady,
+        onWorkspaceLoaded,
+        filterToolboxXml,
         showComingSoon,
         showNewFeatureCallouts,
         soundsTabVisible,
@@ -479,8 +483,12 @@ const GUIComponent = props => {
                                         <Blocks
                                             key={`${blocksId}/${colorMode}/${theme}`}
                                             canUseCloud={canUseCloud}
+                                            filterToolboxXml={filterToolboxXml}
                                             grow={1}
                                             isVisible={blocksTabVisible}
+                                            onBeforeBlocksInject={onBeforeBlocksInject}
+                                            onBlocksReady={onBlocksReady}
+                                            onWorkspaceLoaded={onWorkspaceLoaded}
                                             options={{
                                                 media: `${basePath}static/${colorModeMap[colorMode].blocksMediaFolder}/`
                                             }}
@@ -649,6 +657,10 @@ GUIComponent.propTypes = {
     onTelemetryModalOptOut: PropTypes.func,
     onToggleLoginOpen: PropTypes.func,
     onUpdateProjectThumbnail: PropTypes.func,
+    onBeforeBlocksInject: PropTypes.func,
+    onBlocksReady: PropTypes.func,
+    onWorkspaceLoaded: PropTypes.func,
+    filterToolboxXml: PropTypes.func,
     platform: PropTypes.oneOf(Object.keys(PLATFORM)),
     renderLogin: PropTypes.func,
     setTheme: PropTypes.func.isRequired,

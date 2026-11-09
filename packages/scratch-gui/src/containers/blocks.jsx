@@ -108,12 +108,14 @@ class Blocks extends React.Component {
         this.ScratchBlocks.ScratchProcedures.externalProcedureDefCallback = this.props.onActivateCustomProcedures;
         this.ScratchBlocks.ScratchMsgs.setLocale(this.props.locale);
 
+        this.props.onBeforeBlocksInject({ScratchBlocks: this.ScratchBlocks});
+
         const workspaceConfig = defaultsDeep({},
             Blocks.defaultOptions,
             this.props.options,
             {
                 rtl: this.props.isRtl,
-                toolbox: this.props.toolboxXML,
+                toolbox: this.props.filterToolboxXml(this.props.toolboxXML),
                 theme: new this.ScratchBlocks.Theme(
                     this.props.colorMode,
                     getColorsForMode(this.props.colorMode)
@@ -175,6 +177,13 @@ class Blocks extends React.Component {
         addFunctionListener(this.workspace, 'translate', this.onWorkspaceMetricsChange);
         addFunctionListener(this.workspace, 'zoom', this.onWorkspaceMetricsChange);
         this.workspace.getToolbox().selectItemByPosition(0);
+
+        // Let an external blocks plugin install itself before the VM can emit workspaceUpdate.
+        this.disposeBlocksPlugin = this.props.onBlocksReady({
+            ScratchBlocks: this.ScratchBlocks,
+            workspace: this.workspace,
+            vm: this.props.vm
+        });
 
         this.attachVM();
         // Only update blocks/vm locale when visible to avoid sizing issues
@@ -239,6 +248,10 @@ class Blocks extends React.Component {
         }
     }
     componentWillUnmount () {
+        if (typeof this.disposeBlocksPlugin === 'function') {
+            this.disposeBlocksPlugin();
+        }
+        this.disposeBlocksPlugin = null;
         this.detachVM();
         // Hide any open field editor and move Blockly focus to the workspace
         // root before disposing. Without this, BlockSvg.dispose() detects the
@@ -296,7 +309,7 @@ class Blocks extends React.Component {
                 .getMetrics().viewTop -
             selectedCategoryScrollPosition;
 
-        this.workspace.updateToolbox(this.props.toolboxXML);
+        this.workspace.updateToolbox(this.props.filterToolboxXml(this.props.toolboxXML));
         this.workspace.getToolbox().runAfterRerender(() => {
             const newCategoryScrollPosition = this.workspace
                 .getFlyout()
@@ -499,6 +512,13 @@ class Blocks extends React.Component {
                 );
             });
         });
+
+        this.props.onWorkspaceLoaded({
+            ScratchBlocks: this.ScratchBlocks,
+            workspace: this.workspace,
+            vm: this.props.vm,
+            target: this.props.vm.editingTarget
+        });
     }
     handleMonitorsUpdate (monitors) {
         // Update the checkboxes of the relevant monitors.
@@ -684,6 +704,10 @@ class Blocks extends React.Component {
             onOpenSoundRecorder,
             updateToolboxState,
             onActivateCustomProcedures,
+            filterToolboxXml,
+            onBeforeBlocksInject,
+            onBlocksReady,
+            onWorkspaceLoaded,
             onRequestCloseExtensionLibrary,
             onRequestCloseCustomProcedures,
             toolboxXML,
@@ -741,16 +765,20 @@ Blocks.propTypes = {
     canUseCloud: PropTypes.bool,
     customProceduresVisible: PropTypes.bool,
     extensionLibraryVisible: PropTypes.bool,
+    filterToolboxXml: PropTypes.func,
     isRtl: PropTypes.bool,
     isVisible: PropTypes.bool,
     locale: PropTypes.string.isRequired,
     messages: PropTypes.objectOf(PropTypes.string),
     onActivateColorPicker: PropTypes.func,
     onActivateCustomProcedures: PropTypes.func,
+    onBeforeBlocksInject: PropTypes.func,
+    onBlocksReady: PropTypes.func,
     onOpenConnectionModal: PropTypes.func,
     onOpenSoundRecorder: PropTypes.func,
     onRequestCloseCustomProcedures: PropTypes.func,
     onRequestCloseExtensionLibrary: PropTypes.func,
+    onWorkspaceLoaded: PropTypes.func,
     options: PropTypes.shape({
         media: PropTypes.string,
         zoom: PropTypes.shape({
@@ -796,6 +824,10 @@ Blocks.defaultOptions = {
 };
 
 Blocks.defaultProps = {
+    filterToolboxXml: xml => xml,
+    onBeforeBlocksInject: () => {},
+    onBlocksReady: () => {},
+    onWorkspaceLoaded: () => {},
     isVisible: true,
     options: Blocks.defaultOptions,
     colorMode: DEFAULT_MODE
