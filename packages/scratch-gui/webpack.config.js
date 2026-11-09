@@ -124,6 +124,9 @@ if (!process.env.CI) {
 // build the shipping library in `dist/`
 const distConfig = baseConfig.clone()
     .merge({
+        // FTRPRF: the shared builder's `cheap-module-source-map` emits a map with
+        // one mapping per line at best; Sentry needs real column mappings.
+        devtool: 'source-map',
         entry: {
             'scratch-gui': path.join(__dirname, 'src/index.ts')
         },
