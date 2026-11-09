@@ -16,10 +16,46 @@ const PARTS = {
     filterToolboxXml: 'a.filterToolboxXml;'
 };
 
-const run = parts => {
+const VLQ = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+const vlq = n => {
+    let v = n < 0 ? ((-n) << 1) | 1 : n << 1;
+    let out = '';
+    do {
+        let digit = v & 31;
+        v >>>= 5;
+        if (v) digit |= 32;
+        out += VLQ[digit];
+    } while (v);
+    return out;
+};
+// `lines` lines of `perLine` 4-field segments, hopping across `sources` sources.
+const mappingsFor = (lines, perLine, sources) => {
+    const rows = [];
+    let src = 0;
+    for (let l = 0; l < lines; l++) {
+        const segs = [];
+        for (let i = 0; i < perLine; i++) {
+            const next = (src + 1) % sources;
+            segs.push(vlq(i ? 2 : 0) + vlq(next - src) + vlq(1) + vlq(1));
+            src = next;
+        }
+        rows.push(segs.join(','));
+    }
+    return rows.join(';');
+};
+const realMap = () => JSON.stringify({version: 3, sources: [], mappings: mappingsFor(2000, 100, 1000)});
+const stubMap = () => JSON.stringify({
+    version: 3,
+    sources: Array.from({length: 1988}, (_, i) => `src/${i}.js`),
+    sourcesContent: Array.from({length: 1988}, () => 'x'.repeat(10000)),
+    mappings: 'AAAA'
+});
+
+const run = (parts, map = realMap()) => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'assert-gui-bundle-'));
     const file = path.join(dir, 'scratch-gui.js');
     fs.writeFileSync(file, Object.values(parts).join('\n'));
+    if (map !== null) fs.writeFileSync(`${file}.map`, map);
     try {
         return spawnSync(process.execPath, [script, file], {encoding: 'utf8'});
     } finally {
@@ -62,4 +98,31 @@ for (const marker of Object.keys(PARTS)) {
 test('fails on a missing file and on no argument', () => {
     assert.equal(spawnSync(process.execPath, [script, '/nonexistent/scratch-gui.js']).status, 1);
     assert.equal(spawnSync(process.execPath, [script]).status, 1);
+});
+
+test('passes on a real source map and reports its counts', () => {
+    const result = run(PARTS);
+    assert.equal(result.status, 0);
+    assert.match(result.stdout, /200000 mapping segments across 1000 sources/);
+});
+
+test('fails on a stub map that is large only because of sourcesContent', () => {
+    const map = stubMap();
+    assert.ok(map.length > 10 * 1024 * 1024);
+    const result = run(PARTS, map);
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /looks like a stub: 1 mapping segments/);
+});
+
+test('fails on a map with many segments but few sources', () => {
+    const result = run(PARTS, JSON.stringify({mappings: mappingsFor(2000, 100, 3)}));
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /across 3 sources/);
+});
+
+test('fails on a missing, non-JSON or mapping-less map', () => {
+    assert.match(run(PARTS, null).stderr, /cannot read source map/);
+    assert.match(run(PARTS, 'nope').stderr, /not valid JSON/);
+    assert.match(run(PARTS, '{}').stderr, /no mappings string/);
+    assert.equal(run(PARTS, '{}').status, 1);
 });
