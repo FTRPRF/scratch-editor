@@ -14,6 +14,7 @@ const Selector = props => {
     const {
         buttons,
         containerRef,
+        deleteAction,
         dragType,
         isRtl,
         items,
@@ -26,7 +27,8 @@ const Selector = props => {
         onDeleteClick,
         onDuplicateClick,
         onExportClick,
-        onItemClick
+        onItemClick,
+        spriteActionPolicy
     } = props;
 
     const isRelevantDrag = draggingType === dragType;
@@ -75,12 +77,14 @@ const Selector = props => {
                             costumeURL={item.url}
                             details={item.details}
                             dragPayload={item.dragPayload}
+                            deleteAction={deleteAction}
                             dragType={dragType}
                             id={index}
                             index={index}
                             name={item.name}
                             number={index + 1 /* 1-indexed */}
                             selected={index === selectedItemIndex}
+                            spriteActionPolicy={spriteActionPolicy}
                             onClick={onItemClick}
                             onDeleteButtonClick={onDeleteClick}
                             onDuplicateButtonClick={onDuplicateClick}
@@ -101,6 +105,8 @@ Selector.propTypes = {
         onClick: PropTypes.func
     })),
     containerRef: PropTypes.func,
+    /** FTRPRF: spriteActionPolicy action name for this list's delete ('delete-costume' / 'delete-sound'). */
+    deleteAction: PropTypes.string,
     dragType: PropTypes.oneOf(Object.keys(DragConstants)),
     draggingIndex: PropTypes.number,
     draggingType: PropTypes.oneOf(Object.keys(DragConstants)),
@@ -116,7 +122,9 @@ Selector.propTypes = {
     onItemClick: PropTypes.func.isRequired,
     onRemoveSortable: PropTypes.func,
     ordering: PropTypes.arrayOf(PropTypes.number),
-    selectedItemIndex: PropTypes.number.isRequired
+    selectedItemIndex: PropTypes.number.isRequired,
+    /** FTRPRF: forwarded to every item; see SpriteSelectorItem. */
+    spriteActionPolicy: PropTypes.func
 };
 
 export default SortableHOC(Selector);

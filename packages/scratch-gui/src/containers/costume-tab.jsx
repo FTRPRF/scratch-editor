@@ -372,6 +372,7 @@ class CostumeTab extends React.Component {
                         onClick: addLibraryFunc
                     }
                 ]}
+                deleteAction="delete-costume"
                 dragType={DragConstants.COSTUME}
                 isRtl={isRtl}
                 items={costumeData}
@@ -381,6 +382,7 @@ class CostumeTab extends React.Component {
                 onDrop={this.handleDrop}
                 onDuplicateClick={this.handleDuplicateCostume}
                 onExportClick={this.handleExportCostume}
+                spriteActionPolicy={this.props.spriteActionPolicy}
                 onItemClick={this.handleSelectCostume}
             >
                 {target.costumes ?
@@ -420,6 +422,8 @@ CostumeTab.propTypes = {
             name: PropTypes.string.isRequired
         }))
     }),
+    /** FTRPRF: decides whether 'delete-costume' is offered; see SpriteSelectorItem. */
+    spriteActionPolicy: PropTypes.func,
     vm: PropTypes.instanceOf(VM),
     dynamicCostumes: PropTypes.arrayOf(costumeShape),
     dynamicBackdrops: PropTypes.arrayOf(costumeShape)
