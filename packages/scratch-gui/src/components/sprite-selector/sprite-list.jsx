@@ -9,6 +9,7 @@ import SpriteSelectorItem from '../../containers/sprite-selector-item.jsx';
 import SortableHOC from '../../lib/sortable-hoc.jsx';
 import SortableAsset from '../asset-panel/sortable-asset.jsx';
 import ThrottledPropertyHOC from '../../lib/throttled-property-hoc.jsx';
+import {visibleSprites} from '../../lib/ftrprf-sprite-visibility';
 
 import styles from './sprite-selector.css';
 
@@ -47,7 +48,7 @@ const SpriteList = function (props) {
                 className={styles.itemsWrapper}
                 element="ul"
             >
-                {items.map((sprite, index) => {
+                {visibleSprites(items, spriteActionPolicy).map((sprite, index) => {
 
                     // If the sprite has just received a block drop, used for green highlight
                     const receivedBlocks = (
@@ -139,6 +140,10 @@ SpriteList.propTypes = {
     raised: PropTypes.bool,
     selectedId: PropTypes.string,
     spriteActionPolicy: PropTypes.func
+};
+
+SpriteList.defaultProps = {
+    spriteActionPolicy: () => true
 };
 
 export default SortableHOC(SpriteList);

@@ -298,6 +298,7 @@ const GUIComponent = props => {
                 isRendererSupported={isRendererSupported}
                 isRtl={isRtl}
                 loading={loading}
+                spriteActionPolicy={spriteActionPolicy}
                 stageSize={STAGE_SIZE_MODES.large}
                 vm={vm}
             >
@@ -620,6 +621,7 @@ const GUIComponent = props => {
                                 onSetManualThumbnailButtonClick={onSetManualThumbnailButtonClick}
                                 loading={loading}
                                 showNewFeatureCallouts={showNewFeatureCallouts}
+                                spriteActionPolicy={spriteActionPolicy}
                                 userOwnsProject={userOwnsProject}
                                 username={username}
                                 onUpdateProjectThumbnail={onUpdateProjectThumbnail}

@@ -10,6 +10,7 @@ StageWrapper.propTypes = {
     ariaLabel: PropTypes.string,
     ariaRole: PropTypes.string,
     isRendererSupported: PropTypes.bool.isRequired,
+    spriteActionPolicy: PropTypes.func,
     stageSize: PropTypes.oneOf(Object.keys(STAGE_DISPLAY_SIZES)).isRequired,
     vm: PropTypes.instanceOf(VM).isRequired
 };
