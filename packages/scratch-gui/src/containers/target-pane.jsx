@@ -27,6 +27,7 @@ import downloadBlob from '../lib/download-blob';
 import {ModalFocusContext} from '../contexts/modal-focus-context.jsx';
 import {spriteShape} from '../lib/assets-prop-types.js';
 import mergeDynamicAssets from '../lib/merge-dynamic-assets.js';
+import {vmSpriteIndex} from '../lib/ftrprf-sprite-visibility';
 
 class TargetPane extends React.Component {
     constructor (props) {
@@ -121,6 +122,7 @@ class TargetPane extends React.Component {
         });
     }
     handleSelectSprite (id) {
+        if (!this.props.spriteActionPolicy('select', id)) return;
         this.props.vm.setEditingTarget(id);
         if (this.props.stage && id !== this.props.stage.id) {
             this.props.onHighlightTarget(id);
@@ -224,8 +226,14 @@ class TargetPane extends React.Component {
     handleDrop (dragInfo) {
         const {sprite: targetId} = this.props.hoveredTarget;
         if (dragInfo.dragType === DragConstants.SPRITE) {
-            // Add one to both new and target index because we are not counting/moving the stage
-            this.props.vm.reorderTarget(dragInfo.index + 1, dragInfo.newIndex + 1);
+            // The list only holds the tiles the policy shows: map its positions back to
+            // VM positions. Add one to both because we are not counting/moving the stage.
+            const sprites = Object.keys(this.props.sprites).map(id => this.props.sprites[id]);
+            const policy = this.props.spriteActionPolicy;
+            this.props.vm.reorderTarget(
+                vmSpriteIndex(sprites, policy, dragInfo.index) + 1,
+                vmSpriteIndex(sprites, policy, dragInfo.newIndex) + 1
+            );
         } else if (dragInfo.dragType === DragConstants.BACKPACK_SPRITE) {
             // TODO storage does not have a way of loading zips right now, and may never need it.
             // So for now just grab the zip manually.
@@ -315,6 +323,10 @@ TargetPane.propTypes = {
     onShowImporting: PropTypes.func,
     dynamicSprites: PropTypes.arrayOf(spriteShape),
     ...targetPaneProps
+};
+
+TargetPane.defaultProps = {
+    spriteActionPolicy: () => true
 };
 
 const mapStateToProps = state => ({

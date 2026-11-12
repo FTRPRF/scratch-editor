@@ -169,6 +169,7 @@ class Stage extends React.Component {
         if (drawableId === null) return;
         const targetId = this.props.vm.getTargetIdForDrawableId(drawableId);
         if (targetId === null) return;
+        if (!this.props.spriteActionPolicy('select', targetId)) return;
         this.props.vm.setEditingTarget(targetId);
     }
     onMouseMove (e) {
@@ -445,12 +446,14 @@ Stage.propTypes = {
     micIndicator: PropTypes.bool,
     onActivateColorPicker: PropTypes.func,
     onDeactivateColorPicker: PropTypes.func,
+    spriteActionPolicy: PropTypes.func,
     stageSize: PropTypes.oneOf(Object.keys(STAGE_DISPLAY_SIZES)).isRequired,
     useEditorDragStyle: PropTypes.bool,
     vm: PropTypes.instanceOf(VM).isRequired
 };
 
 Stage.defaultProps = {
+    spriteActionPolicy: () => true,
     useEditorDragStyle: true
 };
 

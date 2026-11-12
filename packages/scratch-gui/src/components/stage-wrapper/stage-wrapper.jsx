@@ -28,6 +28,7 @@ const StageWrapperComponent = function (props) {
         userOwnsProject,
         stageSize,
         showNewFeatureCallouts,
+        spriteActionPolicy,
         vm
     } = props;
     return (
@@ -59,6 +60,7 @@ const StageWrapperComponent = function (props) {
                 {
                     isRendererSupported ?
                         <Stage
+                            spriteActionPolicy={spriteActionPolicy}
                             stageSize={stageSize}
                             vm={vm}
                         /> :
@@ -87,6 +89,7 @@ StageWrapperComponent.propTypes = {
     username: PropTypes.string,
     userOwnsProject: PropTypes.bool,
     onUpdateProjectThumbnail: PropTypes.func,
+    spriteActionPolicy: PropTypes.func,
     stageSize: PropTypes.oneOf(Object.keys(STAGE_DISPLAY_SIZES)).isRequired,
     vm: PropTypes.instanceOf(VM).isRequired
 };
