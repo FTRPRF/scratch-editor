@@ -29,10 +29,6 @@
     },
     "./backdrops": {
       "default": "./src/lib/libraries/backdrops.json"
-    },
-    "./standalone": {
-      "types": "./dist/types/index-standalone.d.ts",
-      "default": "./dist/scratch-gui-standalone.js"
     }
   },
   "main": "./dist/scratch-gui.js",
@@ -43,7 +39,13 @@
   },
   "files": [
     "dist",
-    "src",
+    "!dist/scratch-gui-standalone.js*",
+    "!dist/types/index-standalone.d.ts",
+    "src/reducers",
+    "src/lib/libraries/costumes.json",
+    "src/lib/libraries/sprites.json",
+    "src/lib/libraries/sounds.json",
+    "src/lib/libraries/backdrops.json",
     "LICENSE",
     "TRADEMARK"
   ],
